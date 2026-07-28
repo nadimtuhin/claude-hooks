@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: cd hooks/no-slop && node --test
+
+  # Alpine/musl is where the interesting failures live: BusyBox ash cannot run
+  # the bash hooks, and glibc-linked ripgrep fails silently rather than crashing.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make e2e
+
+  sanitization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: no absolute home paths or private identifiers
+        run: |
+          if grep -rEn '/Users/|/home/[a-z]+/\.claude' . \
+               --exclude-dir=.git --exclude-dir=.github --exclude-dir=e2e; then
+            echo 'absolute paths must not be committed' >&2
+            exit 1
+          fi
