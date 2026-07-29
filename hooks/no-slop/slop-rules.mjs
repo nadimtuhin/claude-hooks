@@ -587,6 +587,16 @@ export const RULES = [
     match: lineRule(/\b(?:delve[sd]?|delving|tapestry|realm of|testament to|navigat(?:e|ing) the complexit(?:y|ies)|seamless(?:ly)?|holistic|myriad of|plethora of|elevate your|unlock the (?:power|potential)|embark on)\b/i),
   },
   {
+    id: 'prose-section-sign',
+    classes: ['prose', 'comment'],
+    severity: 'warn',
+    message: 'Section sign (§) — legal-citation punctuation almost nobody types by hand in engineering notes.',
+    fix: 'Write it out: "§7" → "section 7", or link the heading. In a code fence, quote it.',
+    // skipIf spares a quoted one — this module masks string literals to that character.
+    // slop-ok: prose-section-sign — a rule has to name what it forbids.
+    match: lineRule(/§+\s*\d*/, { skipIf: (t) => /(['"`])[^'"`]*§[^'"`]*\1/.test(t) }),
+  },
+  {
     id: 'prose-negative-parallelism',
     classes: ['prose'],
     severity: 'warn',

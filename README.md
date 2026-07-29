@@ -118,10 +118,16 @@ test file is both a test file and a code file, and commit text is not prose.
 | `marketing-superlative` | `best-in-class`, `cutting-edge`, `bulletproof` |
 | `prose-opener` | `You're absolutely right`, `Great question!` |
 
-**19 WARN** — everything else: comment narration, restated code, decorative
+**20 WARN** — everything else: comment narration, restated code, decorative
 banners, comment density, duplicate test bodies, inflated and doubled-role
 identifiers, tests with no assertions or vague titles, commit filler and body
-narration, prose vocabulary tells and not-just-X-it's-Y constructions.
+narration, prose vocabulary tells, not-just-X-it's-Y constructions, and the
+section sign (legal-citation punctuation nobody hand-types in engineering notes;
+a quoted one is spared, so masked string literals stay clean).
+
+Markdown files are scanned with the `prose` class as well as `comment` and
+`naming` — a `.md` body is prose, so the rhetorical tells apply there and not
+only to chat output.
 
 `comment-density` fires when a file has more comment lines than code lines (and
 at least 6 comments). Its finding lists the line numbers it counted, so the cheap

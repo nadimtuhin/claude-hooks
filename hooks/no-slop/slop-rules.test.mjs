@@ -35,9 +35,9 @@ describe('contract', () => {
     assert.equal(new Set(RULES.map((r) => r.id)).size, RULES.length);
   });
 
-  test('19 of 28 rules are warn, 9 are block', () => {
-    assert.equal(RULES.length, 28);
-    assert.equal(RULES.filter((r) => r.severity === 'warn').length, 19);
+  test('20 of 29 rules are warn, 9 are block', () => {
+    assert.equal(RULES.length, 29);
+    assert.equal(RULES.filter((r) => r.severity === 'warn').length, 20);
     assert.equal(RULES.filter((r) => r.severity === 'block').length, 9);
   });
 
@@ -537,6 +537,7 @@ describe('pragma suppression', () => {
     'prose-opener': [['prose'], 'notes\nGreat question!'],
     'prose-vocabulary-tells': [['prose'], 'notes\nLet me delve into the logs.'],
     'prose-negative-parallelism': [['prose'], "notes\nIt's not just a cache, it's a log."],
+    'prose-section-sign': [['prose'], 'notes\nSee §7 for the retry policy'],
   };
 
   // A finding pinned to line 1 has no line above it to carry a pragma, and a

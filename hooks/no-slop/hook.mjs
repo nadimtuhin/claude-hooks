@@ -131,6 +131,7 @@ export function isExcluded(p) {
 function classesFor(filePath) {
   const set = new Set(['comment', 'naming']);
   if (TEST_PATH.test(filePath)) set.add('testfile');
+  if (/\.mdx?$/i.test(filePath)) set.add('prose');
   return set;
 }
 
