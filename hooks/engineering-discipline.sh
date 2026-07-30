@@ -33,6 +33,9 @@ if printf '%s' "$input" | LC_ALL=C grep -qiE '\b(implement|build|refactor|plan|f
 - NEVER conclude anything from a diff line count without re-running it with `-w`. Wrapping a block in a function, a prop, or a try/catch re-indents every line inside it, and the raw stat reports that as a rewrite. A 70/75 "this rewrote pre-existing code" finding measured 9/14 under `git diff -w` — the opposite conclusion. Quote the `-w` number, not the raw one.
 - To decide whether a line is pre-existing or yours, use `git blame -l <base>` and test whether the owning commit is in `<upstream>..<base>`. Matching line CONTENT false-positives on `}`/`});` and false-negatives when your own addition happens to equal a pre-existing line.
 - An audit that has to produce a finding will produce one. When a metric hands you the violation you went looking for, re-derive it a second way BEFORE writing it up — and if the second method disagrees, the metric was the artifact, not the finding.
+- House style before slop. Before flagging a pattern as slop or a violation, `git grep` whether the rest of the repo already does it. Slop is deviation from the local norm, not a property of a line read on its own.
+- Repetition is the reliable slop signal. A sentence that appears four times means the author filled a slot rather than answered a question. "Does this read AI-written?" is far weaker than "did anyone need to write this here?"
+- A `-` line means removed from THAT FILE, not from the codebase — in a branch full of extractions, most are relocations. Test the exact full line for existence tree-wide before reporting a deletion; substring matching gives false verdicts both ways.
 </engineering-discipline>
 DIRECTIVES
 fi
