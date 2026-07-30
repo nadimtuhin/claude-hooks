@@ -36,6 +36,7 @@ if printf '%s' "$input" | LC_ALL=C grep -qiE '\b(implement|build|refactor|plan|f
 - House style before slop. Before flagging a pattern as slop or a violation, `git grep` whether the rest of the repo already does it. Slop is deviation from the local norm, not a property of a line read on its own.
 - Repetition is the reliable slop signal. A sentence that appears four times means the author filled a slot rather than answered a question. "Does this read AI-written?" is far weaker than "did anyone need to write this here?"
 - A `-` line means removed from THAT FILE, not from the codebase — in a branch full of extractions, most are relocations. Test the exact full line for existence tree-wide before reporting a deletion; substring matching gives false verdicts both ways.
+- To amend a non-tip commit without `rebase -i`: detach at it, edit, `commit --amend`, then `git rebase --onto <new> <old>`. ASSERT the SHA changed — a `git add` that staged nothing makes `--amend` a silent no-op that then rides onto the branch at checkout.
 </engineering-discipline>
 DIRECTIVES
 fi
