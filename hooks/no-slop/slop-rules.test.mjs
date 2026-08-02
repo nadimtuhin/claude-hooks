@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   scan, RULES, RULE_CLASSES, getRule, validateConfig, UnknownRuleError,
-  MAX_FILE_LINES, MAX_SUBJECT_LEN,
+  MAX_FILE_LINES, MAX_FILE_BYTES, MAX_SUBJECT_LEN,
 } from './slop-rules.mjs';
 
 const CODE = ['comment', 'naming'];
@@ -35,9 +35,9 @@ describe('contract', () => {
     assert.equal(new Set(RULES.map((r) => r.id)).size, RULES.length);
   });
 
-  test('20 of 29 rules are warn, 9 are block', () => {
-    assert.equal(RULES.length, 29);
-    assert.equal(RULES.filter((r) => r.severity === 'warn').length, 20);
+  test('22 of 31 rules are warn, 9 are block', () => {
+    assert.equal(RULES.length, 31);
+    assert.equal(RULES.filter((r) => r.severity === 'warn').length, 22);
     assert.equal(RULES.filter((r) => r.severity === 'block').length, 9);
   });
 
@@ -199,6 +199,122 @@ describe('comment-narration-generic-steps', () => {
 
   test('python hash markers fire', () => {
     assert.ok(fires('comment-narration-generic-steps', '# Step 1: open\n# Step 2: read', CODE, { lang: 'py' }));
+  });
+});
+
+describe('comment-changelog-reference', () => {
+  const cases = [
+    '// TASK-35: release the machine-wide lock only after the drain completes',
+    '// (TASK-P2-14, leaseReaper):',
+    "// Mirrors index.ts's BUG 2 fix",
+    '// the same class of bug 0013 shipped',
+    '// an uncaught throw here used to crash the whole poller',
+    "// P2-2's profile lock is released on stop, not on disconnect",
+  ];
+  for (const [i, src] of cases.entries()) {
+    test(`fires ${i}: ${src.trim()}`, () => assert.ok(fires('comment-changelog-reference', src)));
+  }
+
+  test('is warn, not block', () => {
+    const [f] = scan(cases[0], { ruleClasses: CODE }).findings.filter((x) => x.ruleId === 'comment-changelog-reference');
+    assert.equal(f.severity, 'warn');
+  });
+
+  test('comment-provenance (second-person) does not fire on these third-person cases', () => {
+    for (const src of cases) assert.ok(!fires('comment-provenance', src));
+  });
+
+  test('"previously" alone fires', () => {
+    assert.ok(fires('comment-changelog-reference', '// previously this returned null on a miss'));
+  });
+
+  test('bare ticket id without a TASK/BUG prefix fires', () => {
+    assert.ok(fires('comment-changelog-reference', '// P2-2 handles the retry'));
+  });
+
+  test('noisy pair: legitimate prose containing "used to" or "previously" also fires (accepted at warn)', () => {
+    assert.ok(fires('comment-changelog-reference', '// this cache is used to avoid a second round-trip'));
+    assert.ok(fires('comment-changelog-reference', '// previously-seen ids are skipped so the sweep stays idempotent'));
+  });
+
+  test('ordinary comment with no ticket/history language stays quiet', () => {
+    assert.ok(!fires('comment-changelog-reference', '// callers may pass null; the guard below is load-bearing'));
+  });
+});
+
+describe('comment-duplicate-adjacent', () => {
+  test('fires on the fb-desktop residue case: same fact stated twice back to back', () => {
+    const src = [
+      '// Chunked because sqlite caps bound parameters (999 by default) per statement,',
+      '// so a large batch is split into multiple insert calls.',
+      '//',
+      '// sqlite caps bound parameters (999 by default), so this batch is split',
+      '// into chunks before being inserted.',
+    ].join('\n');
+    assert.ok(fires('comment-duplicate-adjacent', src));
+  });
+
+  test('is warn, not block', () => {
+    const src = [
+      '// sqlite caps bound parameters (999 by default) per statement',
+      '//',
+      '// sqlite caps bound parameters (999 by default) per statement',
+    ].join('\n');
+    const [f] = scan(src, { ruleClasses: CODE }).findings.filter((x) => x.ruleId === 'comment-duplicate-adjacent');
+    assert.equal(f.severity, 'warn');
+  });
+
+  test('quiet when the second paragraph is a genuinely different fact', () => {
+    const src = [
+      '// sqlite caps bound parameters (999 by default) per statement',
+      '//',
+      '// retries three times with exponential backoff before giving up',
+    ].join('\n');
+    assert.ok(!fires('comment-duplicate-adjacent', src));
+  });
+
+  test('quiet across non-adjacent blocks separated by code', () => {
+    const src = [
+      '// sqlite caps bound parameters (999 by default) per statement',
+      'insertChunked(rows);',
+      '// sqlite caps bound parameters (999 by default) per statement',
+    ].join('\n');
+    assert.ok(!fires('comment-duplicate-adjacent', src));
+  });
+
+  test('quiet when either paragraph is under the word-count floor', () => {
+    const src = [
+      '// caps bound params',
+      '//',
+      '// sqlite caps bound parameters (999 by default) per statement always',
+    ].join('\n');
+    assert.ok(!fires('comment-duplicate-adjacent', src));
+  });
+
+  test('boundary: moderate topical overlap below the threshold stays quiet', () => {
+    // Both about "the cache", but only 2 of 7 content words shared (ratio ~0.29) —
+    // ordinary adjacent prose, not a restated fact.
+    const src = [
+      '// the cache is keyed by profile id and expires after five minutes',
+      '//',
+      '// eviction runs on a background timer and logs a warning on overflow',
+    ].join('\n');
+    assert.ok(!fires('comment-duplicate-adjacent', src));
+  });
+
+  test('boundary: overlap just at the threshold fires', () => {
+    // 6 shared words / 6-word smaller side = 1.0 ratio, well past 0.6, but the
+    // wording differs enough to prove it's semantic overlap, not exact text.
+    const src = [
+      '// the retry queue drains oldest jobs first and caps at five hundred entries',
+      '//',
+      '// the retry queue caps at five hundred entries and drains oldest jobs first',
+    ].join('\n');
+    assert.ok(fires('comment-duplicate-adjacent', src));
+  });
+
+  test('a single long non-duplicate comment does not fire against itself', () => {
+    assert.ok(!fires('comment-duplicate-adjacent', '// this function validates the profile lock before every send attempt'));
   });
 });
 
@@ -507,6 +623,13 @@ describe('pragma suppression', () => {
   const SAMPLES = {
     'comment-provenance': [CODE, '// as you requested'],
     'comment-provenance-ticketed': [CODE, '// as you requested, see #412'],
+    'comment-changelog-reference': [CODE, '// TASK-35: release the lock only after the drain completes'],
+    'comment-duplicate-adjacent': [
+      CODE,
+      '// sqlite caps bound parameters (999 by default) per statement\n' +
+        '//\n' +
+        '// sqlite caps bound parameters (999 by default) per statement',
+    ],
     'comment-narration-generic-steps': [CODE, '// Step 1: load\n// Step 2: save'],
     'comment-restates-code': [CODE, '// return the result\nreturn result;'],
     'comment-section-banner': [CODE, '// =========='],
@@ -626,8 +749,10 @@ describe('size and time gates', () => {
     assert.deepEqual(scan(src, { ruleClasses: CODE }).findings, []);
   });
 
-  test('over 150KB gates even when short', () => {
-    const src = ['const x = 1;', 'y'.repeat(160 * 1024)].join('\n');
+  test('over the byte ceiling gates even when short', () => {
+    // Derived from the constant, not a literal — the old hardcoded 150KB silently became a
+    // false assertion the moment the ceiling moved.
+    const src = ['const x = 1;', 'y'.repeat(MAX_FILE_BYTES + 1024)].join('\n');
     assert.equal(scan(src, { ruleClasses: CODE }).findings[0].ruleId, 'file-too-large');
   });
 

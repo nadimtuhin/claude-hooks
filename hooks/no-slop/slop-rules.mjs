@@ -28,8 +28,14 @@ export const RULE_CLASSES = ['comment', 'naming', 'testfile', 'commit', 'prose']
 
 const MAX_LINE_LEN = 2000; // longer lines are minified/generated; skip before regex
 const MAX_BRACE_SCAN_LINES = 2000; // bound on the test-body brace walk
-export const MAX_FILE_LINES = 1500;
-export const MAX_FILE_BYTES = 150 * 1024;
+// The gate exists so the hook never stalls a write, not to express an opinion about file size.
+// Measured cost is ~0.02ms/line (a 1500-line TypeScript file scans in ~20ms), so the old 1500-line
+// ceiling was buying nothing and cost real coverage: the files that most accumulate slop are exactly
+// the god-files that sit just over it, and they were being skipped entirely. 10k lines is ~200ms
+// worst case — still imperceptible on a PostToolUse hook — while genuinely pathological or generated
+// files still bail.
+export const MAX_FILE_LINES = 10000;
+export const MAX_FILE_BYTES = 1024 * 1024;
 export const MAX_SUBJECT_LEN = 100;
 
 // Below this a file is too small for the ratio to mean anything: a 3-line helper
@@ -109,6 +115,20 @@ function words(s) {
 /** Sequential test titles: the string literal passed to it/test/describe. */
 const TEST_TITLE = /\b(?:it|test|describe|context|suite)\s*(?:\.\w+)?\s*\(\s*(['"`])((?:\\.|(?!\1).)*)\1/;
 
+/** Contiguous runs of comment lines — a non-comment line (code or blank) ends a block. */
+function* commentBlocks(ctx) {
+  let block = [];
+  for (const { n, text } of ctx.codeLines()) {
+    const c = commentText(text, ctx.lang);
+    if (c !== null) {
+      block.push({ n, c });
+      continue;
+    }
+    if (block.length) { yield block; block = []; }
+  }
+  if (block.length) yield block;
+}
+
 // ---------------------------------------------------------------------------
 // rule authoring helpers
 // ---------------------------------------------------------------------------
@@ -159,6 +179,13 @@ const PROVENANCE = /\b(?:as (?:you |the user )?(?:requested|asked|suggested)|per
 
 const TICKET_REF = /(?:#\d+|https?:\/\/\S+|[A-Z]{2,}-\d+)/;
 
+// Third-person changelog narration: a comment about the CODE's history (a ticket
+// reference, a past bug, a "how it behaved before" aside) rather than a second-
+// person review exchange. PROVENANCE is anchored on "as you/the user requested"
+// and never matches this. The bare-identifier alternative at the end catches a
+// short letter+digit-then-number id with no ticket-word prefix in front of it.
+const CHANGELOG_REF = /\bTASK-[\w-]+|\bBUG\s*\d+\b|\bmirrors\b.*\bfix\b|\bthe same class of bug\b|\bused to\b|\bpreviously\b|\b[A-Z]\d{1,2}-\d+\b/i;
+
 const MARKETING = /\b(?:best[- ]in[- ]class|cutting[- ]edge|state[- ]of[- ]the[- ]art|world[- ]class|game[- ]chang(?:er|ing)|blazingly fast|next[- ]generation|industry[- ]leading|bulletproof|rock[- ]solid|enterprise[- ]grade)\b/i;
 
 // A ruler: either a long run of divider characters, or a short run bookending
@@ -193,6 +220,64 @@ export const RULES = [
     message: 'Provenance comment carrying a ticket reference.',
     fix: 'Keep the ticket link, drop the narration: "// see #412" rather than "// changed per review, see #412".',
     match: commentRule((c, raw) => PROVENANCE.test(c) && TICKET_REF.test(raw)),
+  },
+  {
+    id: 'comment-changelog-reference',
+    classes: ['comment'],
+    severity: 'warn',
+    message: 'Comment narrates repo history (a ticket, a past bug, "used to"/"previously") instead of stating the invariant.',
+    fix: 'Rewrite as the current invariant and drop the reference: "release the lock only after the drain completes", not "TASK-35: release the lock only after...".',
+    // Deliberately warn, not block: some of these encode a real invariant (a
+    // lock-ordering rule tied to a ticket is still load-bearing) — deciding what
+    // to keep vs. rewrite is a human judgement call, not a regex's. The habitual-
+    // past-tense pair (see the alternation above) is the noisiest part of this
+    // rule, but it stays merged rather than split: at warn severity an occasional
+    // hit on legitimate prose is cheap, and a second near-identical rule would buy
+    // no extra precision.
+    match: commentRule((c) => CHANGELOG_REF.test(c)),
+  },
+  {
+    id: 'comment-duplicate-adjacent',
+    classes: ['comment'],
+    severity: 'warn',
+    message: 'Two adjacent comment paragraphs restate the same fact — the classic residue of a new explanation prepended without deleting the stale one.',
+    fix: 'Delete whichever paragraph is wrong or stale; keep one explanation.',
+    // Threshold: containment ratio (shared content words / smaller side's content-word
+    // count) >= 0.6, each side needing >=6 content words first so a short title/label
+    // line (e.g. a one-line file banner) can't trip it against the paragraph below it.
+    // Containment rather than Jaccard because the two paragraphs are rarely the same
+    // length (the fb-desktop residue case: a 3-line stale explanation followed by a
+    // 1-line replacement) — Jaccard would undercount that as a big union. 0.6 was
+    // picked against that real case (>0.8 overlap) vs. ordinary back-to-back prose
+    // about the same topic that isn't a duplicate (~0.3-0.5 overlap on the test
+    // table below).
+    match: function* (ctx) {
+      const MIN_WORDS = 6;
+      const THRESHOLD = 0.6;
+      for (const block of commentBlocks(ctx)) {
+        const paras = [];
+        let cur = [];
+        for (const { n, c } of block) {
+          if (c.trim() === '') {
+            if (cur.length) paras.push(cur);
+            cur = [];
+            continue;
+          }
+          cur.push({ n, c });
+        }
+        if (cur.length) paras.push(cur);
+        for (let i = 1; i < paras.length; i++) {
+          const a = paras[i - 1];
+          const b = paras[i];
+          const wa = new Set(a.flatMap((l) => words(l.c)).filter((w) => !STOPWORDS.has(w)));
+          const wb = new Set(b.flatMap((l) => words(l.c)).filter((w) => !STOPWORDS.has(w)));
+          if (wa.size < MIN_WORDS || wb.size < MIN_WORDS) continue;
+          const shared = [...wa].filter((w) => wb.has(w)).length;
+          const ratio = shared / Math.min(wa.size, wb.size);
+          if (ratio >= THRESHOLD) yield { line: b[0].n, excerpt: b[0].c.trim() };
+        }
+      }
+    },
   },
   {
     id: 'comment-narration-generic-steps',
