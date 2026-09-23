@@ -19,7 +19,7 @@ const BASELINE_FILE = '.no-slop-baseline.json';
 const CONFIG_FILE = '.no-slop.json';
 const WARN_CAP = 3;
 
-const EXCLUDED_DIR = /(?:^|\/)(?:node_modules|dist|build|out|coverage|vendor|generated|\.git|\.next|target)(?:\/|$)/;
+const EXCLUDED_DIR = /(?:^|\/)(?:node_modules|dist|build|out|coverage|vendor|generated|\.git|\.next|target)(?:\/|$)|\/tmp\/claude-[^/]+\/.*\/scratchpad\//;
 const EXCLUDED_FILE = /\.min\.[a-z]+$|\.(?:lock|map|snap)$|-lock\.(?:json|ya?ml)$/;
 const SCANNABLE = /\.(?:[cm]?[jt]sx?|py|rb|go|rs|java|kt|swift|php|sh|bash|c|h|cc|cpp|hpp|cs|scala|sql|md)$/;
 const TEST_PATH = /(?:^|\/)(?:tests?|__tests__|spec|e2e)(?:\/|$)|\.(?:test|spec)\.[cm]?[jt]sx?$|_test\.(?:py|go|rb)$|test_[^/]+\.py$/;

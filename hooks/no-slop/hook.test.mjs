@@ -72,10 +72,10 @@ describe('commitMessage extraction', () => {
 });
 
 describe('path exclusion', () => {
-  for (const p of ['a/node_modules/b.js', 'dist/main.js', 'build/x.ts', 'app.min.js', 'pnpm-lock.yaml', 'x/coverage/y.ts']) {
+  for (const p of ['a/node_modules/b.js', 'dist/main.js', 'build/x.ts', 'app.min.js', 'pnpm-lock.yaml', 'x/coverage/y.ts', '/private/tmp/claude-501/-Users-x/abc/scratchpad/detail.py']) {
     test(`excluded: ${p}`, () => assert.ok(isExcluded(p)));
   }
-  for (const p of ['src/a.ts', 'main/parser.js', 'lib/distance.ts']) {
+  for (const p of ['src/a.ts', 'main/parser.js', 'lib/distance.ts', 'src/scratchpad.ts']) {
     test(`scanned: ${p}`, () => assert.ok(!isExcluded(p)));
   }
 });
