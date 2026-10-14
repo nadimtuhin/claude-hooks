@@ -7,6 +7,11 @@ The main one is **no-slop**: a scanner that catches mechanical AI slop in code
 comments, commit messages, test bodies, and the model's own prose, at the moment
 it is written.
 
+It runs as a dependency-free Node script, or as an optional Go binary with the
+same rules and exit codes, held to parity by a differential harness in CI. The
+Go binary takes about 15ms per hook call against Node's 50ms, and no-slop runs
+up to three times per turn.
+
 ---
 
 ## What no-slop is, and is not
@@ -47,6 +52,26 @@ cd claude-hooks
 ```
 
 Then restart Claude Code — hooks are read at session start.
+
+### Optional: the Go binary
+
+Needs Go 1.26 or newer. Build it once, and again after every `git pull`, since
+the binary is not committed:
+
+```sh
+cd hooks/no-slop/go && go build -o no-slop .
+```
+
+Then point the three no-slop entries in `~/.claude/settings.json` at it, keeping
+Node as the fallback so a missing binary never disables the hook:
+
+```sh
+if [ -x "$DIR/hooks/no-slop/go/no-slop" ]; then "$DIR/hooks/no-slop/go/no-slop" write; else node "$DIR/hooks/no-slop/hook.mjs" write; fi
+```
+
+Same for `commit` and `turn`, with `$DIR` replaced by the path of this
+checkout. The binary also takes `scan` and `baseline` with the same flags as
+`hook.mjs`.
 
 On an existing codebase, snapshot what is already there so you only ever see
 **new** findings:
@@ -98,10 +123,11 @@ and `Claude-Session:` trailers are exempt.
 
 ## Rules
 
-27 rules in five classes. A rule runs only when its class is in scope: a file
-write gets `comment` + `naming`, plus `testfile` if the path looks like a test;
-a commit gets `commit`; a turn gets `prose`. That is two axes deliberately — a
-test file is both a test file and a code file, and commit text is not prose.
+32 rules in six classes. A rule runs only when its class is in scope: a file
+write gets `comment` + `naming` + `style`, plus `testfile` if the path looks
+like a test; a commit gets `commit`; a turn gets `prose`. That is two axes
+deliberately — a test file is both a test file and a code file, and commit
+text is not prose.
 
 **9 BLOCK** — objective, convention-based, near-zero judgement:
 
@@ -118,19 +144,27 @@ test file is both a test file and a code file, and commit text is not prose.
 | `marketing-superlative` | `best-in-class`, `cutting-edge`, `bulletproof` |
 | `prose-opener` | `You're absolutely right`, `Great question!` |
 
-**20 WARN** — everything else: comment narration, restated code, decorative
+**23 WARN** — everything else: comment narration, restated code, decorative
 banners, comment density, duplicate test bodies, inflated and doubled-role
 identifiers, tests with no assertions or vague titles, commit filler and body
-narration, prose vocabulary tells, not-just-X-it's-Y constructions, and the
-section sign (legal-citation punctuation nobody hand-types in engineering notes;
-a quoted one is spared, so masked string literals stay clean).
+narration, prose vocabulary tells, not-just-X-it's-Y constructions, nested
+ternaries, and the section sign (legal-citation punctuation nobody hand-types
+in engineering notes; a quoted one is spared, so masked string literals stay
+clean).
+
+| Rule | Fires on |
+|---|---|
+| `style-nested-ternary` | `a ? b ? 1 : 2 : 3` — a ternary inside another ternary's branch; a single ternary stays quiet |
 
 Markdown files are scanned with the `prose` class as well as `comment` and
 `naming` — a `.md` body is prose, so the rhetorical tells apply there and not
 only to chat output.
 
 `comment-density` fires when a file has more comment lines than code lines (and
-at least 6 comments). Its finding lists the line numbers it counted, so the cheap
+at least 6 comments and 10 code lines — both floors matter, because a one-function
+module whose header explains the trap it exists for clears the comment floor on
+that header alone, and the only edit that gets it under the ratio is deleting the
+explanation). Its finding lists the line numbers it counted, so the cheap
 way to comply is deleting narration rather than whichever comment is longest —
 which is systematically the one documenting a trap. Markdown, shell and test
 files are exempt: a high ratio is the convention in all three.
@@ -195,6 +229,7 @@ sets only a threshold does not drop a severity the parent set.
 | --- | --- | --- |
 | `commit-subject-too-long` | `max` | `100` |
 | `comment-density` | `minComments` | `6` |
+| `comment-density` | `minCode` | `10` |
 
 The subject-length default is 100, not the conventional 72, on measurement: over
 300 real commits, 72 fired 151 times and 100 fired 18. A gate that stops half of
@@ -214,6 +249,22 @@ The pragma covers its own line and the one immediately below — no further. It
 must name a rule: a bare `slop-ok` parses, suppresses nothing, and reports
 itself, rather than silently disabling every rule forever including ones added
 years later.
+
+For a span, or for a line you cannot put a comment beside:
+
+```js
+// no-slop-disable-next-line naming-inflated
+class EnhancedParser {}
+
+/* no-slop-disable comment-narration-generic-steps */
+// ...generated or vendored block...
+/* no-slop-enable comment-narration-generic-steps */
+```
+
+`*` in place of a rule id covers every rule. A `no-slop-disable` with no
+matching `no-slop-enable` runs to the end of the file on purpose: a forgotten
+enable is the bug, and quietly ending the span early would hide slop nobody
+meant to exempt.
 
 ### Baseline
 
@@ -240,7 +291,7 @@ numbers against the wrong commit.
 
 Exit codes: `scan` returns 1 if anything was found at or above `--severity`.
 
-Write mode caps output at every BLOCK plus three WARNs, then `+N more`. 17 of 26
+Write mode caps output at every BLOCK plus three WARNs, then `+N more`. 23 of 32
 rules are WARN; uncapped output reads as "complains about everything".
 
 ---
@@ -275,9 +326,19 @@ make test        # unit tests, no container, no key
 make e2e         # tier 1 in Alpine/musl — deterministic, no key. The CI gate.
 make e2e-host    # the same tier-1 assertions on your host, without Docker
 make e2e-live    # tier 2: drives a real headless session. Needs ANTHROPIC_API_KEY.
+make go-test     # Go port: vet + unit tests
+make parity      # build the Go binary, diff its findings and CLI output against hook.mjs
+make e2e-host-go # tier-1 assertions against the Go binary
 ```
 
-**Unit tests** — 270 of them, no dependencies. `slop-rules.mjs` is pure (no I/O, no
+**Parity** — `hook.mjs` is the reference. `parity/harness.mjs` runs both
+implementations over the fixtures (plus any local repos and transcripts you
+point it at), diffs every finding, and fails if any rule id has zero findings
+in the corpus, so an untested rule cannot pass by matching nothing.
+`parity/cli-replay.mjs` diffs exit codes and output for 500 hook payloads.
+Any rule change lands in both files and passes `make parity`.
+
+**Unit tests** — 372 of them, no dependencies. `slop-rules.mjs` is pure (no I/O, no
 `process`), so every rule is testable without a filesystem. `hook.mjs` owns all
 I/O and is tested through subprocesses, because a bad `tool_input` path or a
 config file that silently disables everything is exactly what unit tests on
