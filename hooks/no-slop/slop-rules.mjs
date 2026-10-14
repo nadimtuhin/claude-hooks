@@ -117,7 +117,7 @@ function words(s) {
 }
 
 /** Sequential test titles: the string literal passed to it/test/describe. */
-const TEST_TITLE = /\b(?:it|test|describe|context|suite)\s*(?:\.\w+)?\s*\(\s*(['"`])((?:\\.|(?!\1).)*)\1/;
+const TEST_TITLE = /\b(?:it|test|describe|context|suite)\s*(?:\.\w+)?\s*\(\s*(['"`])((?:\\.|(?!\1)[^\\\n\r\u2028\u2029])*)\1/;
 
 /** Contiguous runs of comment lines — a non-comment line (code or blank) ends a block. */
 function* commentBlocks(ctx) {
@@ -590,7 +590,7 @@ export const RULES = [
           .map((l) => l.replace(/\/\/.*$/, ''))
           .filter((l) => l.trim() !== '')
           .join('\n')
-          .replace(/(['"`])(?:\\.|(?!\1).)*\1/g, '§')
+          .replace(/(['"`])(?:\\.|(?!\1)[^\\\n\r\u2028\u2029])*\1/g, '§')
           .replace(/\b\d+(?:\.\d+)?\b/g, '§')
           .replace(/\s+/g, ' ')
           .trim();
@@ -879,7 +879,7 @@ function blankFenceInteriors(lines) {
 function collectTestBodies(lines, overBudget = () => false) {
   const bodies = [];
   let overran = false;
-  const opener = /\b(?:it|test)\s*(?:\.\w+)?\s*\(\s*(['"`])((?:\\.|(?!\1).)*)\1\s*,\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>\s*\{/;
+  const opener = /\b(?:it|test)\s*(?:\.\w+)?\s*\(\s*(['"`])((?:\\.|(?!\1)[^\\\n\r\u2028\u2029])*)\1\s*,\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>\s*\{/;
   for (let i = 0; i < lines.length; i++) {
     if (overBudget()) { overran = true; break; }
     if (lines[i].length > MAX_LINE_LEN) continue;

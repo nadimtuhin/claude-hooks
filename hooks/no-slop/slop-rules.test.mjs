@@ -813,6 +813,30 @@ describe('size and time gates', () => {
     assert.equal(fires('naming-redundant-type-suffix', src), false);
   });
 
+  test('quoted-title regexes do not backtrack exponentially on a run of backslashes', () => {
+    const slashes = '\\'.repeat(44);
+    const testfile = new Set([...CODE, 'testfile']);
+    const cases = {
+      title: `it('${slashes}`,
+      opener: `it('${slashes}`,
+      literal: `it('a', () => {\n  x\n  y\n  '${slashes}\n});`,
+    };
+    for (const [name, src] of Object.entries(cases)) {
+      const started = Date.now();
+      scan(src, { ruleClasses: testfile });
+      assert.ok(Date.now() - started < 1000, `${name} took ${Date.now() - started}ms`);
+    }
+  });
+
+  test('escaped quotes stay inside a test title and literals do not span lines', () => {
+    const testfile = new Set(['testfile']);
+    const empty = scan("it('it\\'s fine', () => {});", { ruleClasses: testfile }).findings;
+    assert.ok(empty.some((f) => f.ruleId === 'testfile-empty-body'));
+    const body = (word) => `it('${word}', () => {\n  run('a\\'b');\n  x = "q";\n  y = 1;\n});`;
+    const dup = scan(`${body('one')}\n${body('two')}`, { ruleClasses: testfile }).findings;
+    assert.ok(dup.some((f) => f.ruleId === 'testfile-duplicate-body'));
+  });
+
   test('a clean file produces no findings at all', () => {
     const src = [
       'export function parseInvoice(raw) {',

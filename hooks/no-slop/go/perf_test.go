@@ -148,3 +148,37 @@ func TestPragmaAfterManyCommentOpenersStillApplies(t *testing.T) {
 		t.Fatalf("pragma lost: %+v", got)
 	}
 }
+
+// In (?:\\.|(?!\1).)* a backslash can be consumed by either branch, so a failing match tries 2^n splits.
+func TestQuotedTitleRegexesAreLinearOnBackslashRuns(t *testing.T) {
+	slashes := strings.Repeat(`\`, 36)
+	cases := map[string]func(){
+		"testTitleRe":     func() { testTitleRe.Find("it('" + slashes) },
+		"testOpenerRe":    func() { testOpenerRe.Find("it('" + slashes) },
+		"quotedLiteralRe": func() { quotedLiteralRe.ReplaceAll("'"+slashes, "§") },
+	}
+	for name, run := range cases {
+		start := time.Now()
+		run()
+		if elapsed := time.Since(start); elapsed > time.Second {
+			t.Errorf("%s took %v on a quote and 36 backslashes, want under 1s", name, elapsed)
+		}
+	}
+}
+
+func TestQuotedTitleRegexesStillMatchEscapesAndStopAtLineBreaks(t *testing.T) {
+	if m := testTitleRe.Find(`it('it\'s ok\\', () => {})`); m == nil {
+		t.Fatal("escaped quote and escaped backslash must stay inside the title")
+	} else if g, _ := m.Group(2); g != `it\'s ok\\` {
+		t.Fatalf("title = %q", g)
+	}
+	if m := testOpenerRe.Find(`it("a \"b\" c", async () => {`); m == nil {
+		t.Fatal("opener with escaped quotes must match")
+	}
+	if got := quotedLiteralRe.ReplaceAll("a 'x\ny' b", "§"); got != "a 'x\ny' b" {
+		t.Fatalf("a literal must not span a line break, got %q", got)
+	}
+	if got := quotedLiteralRe.ReplaceAll(`f('a\'b', "c")`, "§"); got != "f(§, §)" {
+		t.Fatalf("got %q", got)
+	}
+}
