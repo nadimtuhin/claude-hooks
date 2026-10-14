@@ -1,0 +1,54 @@
+{"fn":"commitMessage","arg":"git commit -m \"fix the parser\"","result":"fix the parser"}
+{"fn":"commitMessage","arg":"git commit -m 'fix the parser'","result":"fix the parser"}
+{"fn":"commitMessage","arg":"git commit --message=\"fix parser\"","result":"fix parser"}
+{"fn":"commitMessage","arg":"git commit -am \"fix parser\"","result":"fix parser"}
+{"fn":"commitMessage","arg":"git commit -m \"sub\" -m \"body\"","result":"sub\n\nbody"}
+{"fn":"commitMessage","arg":"cd /x && git add -A && git commit -m \"fix parser\"","result":"fix parser"}
+{"fn":"commitMessage","arg":"git commit -m \"$(cat <<'EOF'\nfix parser\n\nbody line\nEOF\n)\"","result":"fix parser\n\nbody line"}
+{"fn":"commitMessage","arg":"git commit -F msg.txt","result":null}
+{"fn":"commitMessage","arg":"git commit --file=msg.txt","result":null}
+{"fn":"commitMessage","arg":"git commit --template t","result":null}
+{"fn":"commitMessage","arg":"git commit","result":null}
+{"fn":"commitMessage","arg":"git commit -a","result":null}
+{"fn":"commitMessage","arg":"git log --oneline","result":null}
+{"fn":"commitMessage","arg":"ls -la","result":null}
+{"fn":"commitMessage","arg":"echo \"no commitment here\"","result":null}
+{"fn":"isExcluded","arg":"a/node_modules/b.js","result":true}
+{"fn":"isExcluded","arg":"dist/main.js","result":true}
+{"fn":"isExcluded","arg":"build/x.ts","result":true}
+{"fn":"isExcluded","arg":"app.min.js","result":true}
+{"fn":"isExcluded","arg":"pnpm-lock.yaml","result":true}
+{"fn":"isExcluded","arg":"x/coverage/y.ts","result":true}
+{"fn":"isExcluded","arg":"/private/tmp/claude-501/-Users-x/abc/scratchpad/detail.py","result":true}
+{"fn":"isExcluded","arg":"src/a.ts","result":false}
+{"fn":"isExcluded","arg":"main/parser.js","result":false}
+{"fn":"isExcluded","arg":"lib/distance.ts","result":false}
+{"fn":"isExcluded","arg":"src/scratchpad.ts","result":false}
+{"fn":"commitMessage","arg":"git commit -m \"Add cutting-edge parser\"","result":"Add cutting-edge parser"}
+{"fn":"commitMessage","arg":"git commit -m \"fix null deref in parser\"","result":"fix null deref in parser"}
+{"fn":"commitMessage","arg":"git commit -m \"wip\"","result":"wip"}
+{"fn":"commitMessage","arg":"","result":null}
+{"fn":"isExcluded","arg":"/var/folders/mg/ksymrhlj5tdcyj3cjfghp8w80000gn/T/no-slop-y2vu4i/a.test.ts","result":false}
+{"fn":"isExcluded","arg":"/var/folders/mg/ksymrhlj5tdcyj3cjfghp8w80000gn/T/no-slop-y2vu4i/clean.ts","result":false}
+{"fn":"isExcluded","arg":"/var/folders/mg/ksymrhlj5tdcyj3cjfghp8w80000gn/T/no-slop-y2vu4i/dist/a.test.ts","result":true}
+{"fn":"isExcluded","arg":"/var/folders/mg/ksymrhlj5tdcyj3cjfghp8w80000gn/T/no-slop-y2vu4i/many.ts","result":false}
+{"fn":"isExcluded","arg":"/var/folders/mg/ksymrhlj5tdcyj3cjfghp8w80000gn/T/no-slop-y2vu4i/cfg.ts","result":false}
+{"fn":"isExcluded","arg":"/var/folders/mg/ksymrhlj5tdcyj3cjfghp8w80000gn/T/no-slop-y2vu4i/legacy.ts","result":false}
+{"fn":"commitMessage","arg":"git commit -m x","result":"x"}
+{"fn":"commitMessage","arg":"git -C /repo/wt-pr1 commit -m x","result":"x"}
+{"fn":"commitMessage","arg":"rtk git commit -m x","result":"x"}
+{"fn":"commitMessage","arg":"cd /abs/path && git commit -m x","result":"x"}
+{"fn":"commitMessage","arg":"pnpm run typecheck && pnpm run lint && git commit -m x","result":"x"}
+{"fn":"commitMessage","arg":"git commit --amend -m fix","result":"fix"}
+{"fn":"commitMessage","arg":"git commit -a -m x","result":"x"}
+{"fn":"commitMessage","arg":"git commit -m \"$(cat <<'EOF'\nsubject line\n\nbody\nEOF\n)\"","result":"subject line\n\nbody"}
+{"fn":"commitMessage","arg":"git log --grep commit","result":null}
+{"fn":"commitMessage","arg":"git commit --dry-run","result":null}
+{"fn":"commitMessage","arg":"echo \"git commit\"","result":null}
+{"fn":"commitMessage","arg":"git commit -C HEAD","result":null}
+{"fn":"isExcluded","arg":"/var/folders/mg/ksymrhlj5tdcyj3cjfghp8w80000gn/T/no-slop-density-2eremV/heavy.ts","result":false}
+{"fn":"isExcluded","arg":"/var/folders/mg/ksymrhlj5tdcyj3cjfghp8w80000gn/T/no-slop-density-2eremV/lean.ts","result":false}
+{"fn":"isExcluded","arg":"/var/folders/mg/ksymrhlj5tdcyj3cjfghp8w80000gn/T/no-slop-density-2eremV/format.ts","result":false}
+{"fn":"isExcluded","arg":"prisma/generated/client.ts","result":true}
+{"fn":"isExcluded","arg":"/abs/src/generated/models/Protocol.ts","result":true}
+{"fn":"isExcluded","arg":"src/generators/report.ts","result":false}
