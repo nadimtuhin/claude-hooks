@@ -392,9 +392,28 @@ func nonBlankLines(s string) int {
 	return n
 }
 
+// removeBlockComments is text.replace(/\/\*[\s\S]*?\*\//g, ""): once one opener has no closer, no later one can have either.
+func removeBlockComments(text string) string {
+	var out strings.Builder
+	for {
+		open := strings.Index(text, "/*")
+		if open < 0 {
+			break
+		}
+		closeAt := strings.Index(text[open+2:], "*/")
+		if closeAt < 0 {
+			break
+		}
+		out.WriteString(text[:open])
+		text = text[open+2+closeAt+2:]
+	}
+	out.WriteString(text)
+	return out.String()
+}
+
 // stripComments removes block comments, then per-line // tails.
 func stripComments(text string) []string {
-	lines := strings.Split(blockCommentRe.ReplaceAll(text, ""), "\n")
+	lines := strings.Split(removeBlockComments(text), "\n")
 	for i, l := range lines {
 		lines[i] = lineCommentTail.ReplaceAll(l, "")
 	}
