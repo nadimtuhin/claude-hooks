@@ -276,7 +276,7 @@ func TestWriteMode(t *testing.T) {
 	r := newRepo(t)
 	test := r.write("a.test.ts", "it('works', () => {});\n")
 	res := r.run(jsonPayload(t, m{"tool_name": "Edit", "tool_input": m{"file_path": test}}), "write")
-	if res.code != 2 || !strings.Contains(res.errOut, "testfile-empty-body") || !strings.Contains(res.errOut, "in a.test.ts:") {
+	if res.code != 2 || !strings.Contains(res.errOut, "testfile-empty-body") || !strings.Contains(res.errOut, "a.test.ts:1 testfile-empty-body (block)") {
 		t.Fatalf("%+v", res)
 	}
 	clean := r.write("clean.ts", "export const two = 1 + 1;\n")
@@ -296,11 +296,8 @@ func TestWriteMode(t *testing.T) {
 	}
 	file := r.write("many.ts", strings.Join(many, "\n"))
 	res = r.run(writePayload(t, file), "write")
-	if strings.Count(res.errOut, "[WARN]") != 3 || !strings.Contains(res.errOut, "more warning(s) — see: no-slop scan many.ts --all") {
+	if strings.Count(res.errOut, "(warn)") != 3 || !strings.HasSuffix(res.errOut, "+6 more: no-slop scan many.ts --all\n") {
 		t.Fatalf("warn cap: %+v", res)
-	}
-	if !strings.HasSuffix(res.errOut, "These are style tripwires, not a build failure. Fix what is genuinely slop and move on.\n") {
-		t.Fatalf("closing line: %q", res.errOut)
 	}
 	nb := jsonPayload(t, m{"tool_input": m{"file_path": nil, "notebook_path": file}})
 	if res := r.run(nb, "write"); res.code != 2 {

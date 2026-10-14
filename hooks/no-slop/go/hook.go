@@ -508,3 +508,12 @@ func commitMessage(command string) (message string, ok bool) {
 	}
 	return strings.Join(messages, "\n\n"), true
 }
+
+// renderTerse is the one-line-per-finding form for hook output an agent reads.
+func renderTerse(findings []Finding, file string) string {
+	lines := make([]string, len(findings))
+	for i, f := range findings {
+		lines[i] = fmt.Sprintf("%s:%d %s (%s)", file, f.Line, f.RuleID, f.Severity)
+	}
+	return strings.Join(lines, "\n")
+}

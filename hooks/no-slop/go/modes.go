@@ -40,11 +40,10 @@ func (a *app) modeWrite() int {
 	}
 
 	shown, hidden := capped(fresh, warnCap)
-	a.eprintf("no-slop found %d issue(s) in %s:\n%s\n", len(fresh), rel, render(shown, rel))
+	a.eprintf("no-slop:\n%s\n", renderTerse(shown, rel))
 	if hidden > 0 {
-		a.eprintf("  +%d more warning(s) — see: no-slop scan %s --all\n", hidden, rel)
+		a.eprintf("+%d more: no-slop scan %s --all\n", hidden, rel)
 	}
-	a.eprintf("These are style tripwires, not a build failure. Fix what is genuinely slop and move on.\n")
 	return 2
 }
 
