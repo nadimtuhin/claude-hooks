@@ -129,21 +129,72 @@ export function isExcluded(p) {
 }
 
 function classesFor(filePath) {
-  const set = new Set(['comment', 'naming']);
+  const set = new Set(['comment', 'naming', 'style']);
   if (TEST_PATH.test(filePath)) set.add('testfile');
   if (/\.mdx?$/i.test(filePath)) set.add('prose');
   return set;
+}
+
+/**
+ * Inline suppression directives, three forms:
+ *   // no-slop-disable-next-line <rule>        suppresses one line
+ *   /* no-slop-disable <rule>   ...  /* no-slop-enable <rule> * /
+ * Bare `no-slop-disable` without a rule id means "all rules" for its span.
+ * @returns {Array<{ruleId: string, line: number, endLine: number}>}
+ */
+function findDisableDirectives(lines) {
+  const directives = [];
+  let activeBlock = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const next = line.match(/no-slop-disable-next-line\s+(\*|\S+)/);
+    if (next) {
+      directives.push({ ruleId: next[1].trim(), line: i + 2, endLine: i + 2 });
+      continue;
+    }
+    const off = line.match(/no-slop-disable\s+(\*|\S+)/);
+    if (off) {
+      activeBlock = { ruleId: off[1].trim(), startLine: i + 1 };
+      continue;
+    }
+    if (activeBlock && /no-slop-enable\b/.test(line)) {
+      directives.push({ ruleId: activeBlock.ruleId, line: activeBlock.startLine, endLine: i + 1 });
+      activeBlock = null;
+    }
+  }
+  // Unclosed block runs to EOF — intentional. A forgetten enable is the bug here,
+  // and silently narrowing the span would hide slop the author did not exempt.
+  if (activeBlock) {
+    directives.push({ ruleId: activeBlock.ruleId, line: activeBlock.startLine, endLine: lines.length });
+  }
+  return directives;
+}
+
+/** True when `line` (1-based) sits inside a directive matching `ruleId` (or the wildcard "*"). */
+function isSuppressed(directives, ruleId, line) {
+  return directives.some(
+    (d) =>
+      (d.ruleId === '*' || d.ruleId === ruleId) &&
+      line >= d.line &&
+      line <= d.endLine
+  );
 }
 
 function scanFile(filePath, { config, extraClasses } = {}) {
   const text = fs.readFileSync(filePath, 'utf8');
   const classes = extraClasses ?? classesFor(filePath);
   const cfg = config ?? loadConfig(path.dirname(filePath));
-  return scan(text, {
+  const { findings } = scan(text, {
     lang: path.extname(filePath).replace('.', '') || 'unknown',
     ruleClasses: classes,
     config: cfg,
   });
+  const directives = findDisableDirectives(text.split('\n'));
+  return {
+    findings: directives.length
+      ? findings.filter((f) => !isSuppressed(directives, f.ruleId, f.line))
+      : findings,
+  };
 }
 
 function* walk(dir) {

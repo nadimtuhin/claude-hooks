@@ -339,8 +339,12 @@ describe('write mode: tool input shapes and comment density', () => {
     d = fs.mkdtempSync(path.join(os.tmpdir(), 'no-slop-density-'));
     fs.mkdirSync(path.join(d, '.git'));
     fs.writeFileSync(path.join(d, 'heavy.ts'), [
-      '// one', '// two', '// three', '// four', '// five', '// six', '// seven',
-      'export const a = 1;', 'export const b = 2;',
+      '// one', '// two', '// three', '// four', '// five', '// six',
+      '// seven', '// eight', '// nine', '// ten', '// eleven',
+      'export const a = 1;', 'export const b = 2;', 'export const c = 3;',
+      'export const d = 4;', 'export const e = 5;', 'export const f = 6;',
+      'export const g = 7;', 'export const h = 8;', 'export const i = 9;',
+      'export const j = 10;',
     ].join('\n'));
     fs.writeFileSync(path.join(d, 'lean.ts'), [
       '// the one comment this file needs',
@@ -366,7 +370,7 @@ describe('write mode: tool input shapes and comment density', () => {
       const r = run(['write'], { stdin: payload(tool, 'heavy.ts') });
       assert.equal(r.code, 2);
       assert.match(r.stderr, /comment-density/);
-      assert.match(r.stderr, /7 comment vs 2 code/);
+      assert.match(r.stderr, /11 comment vs 10 code/);
     });
   }
 

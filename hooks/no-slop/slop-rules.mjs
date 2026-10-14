@@ -24,7 +24,7 @@
 //   (line, ruleId, excerpt) triple, sorted by (line asc, block before warn,
 //   ruleId asc). Each finding is { ruleId, severity, line, excerpt, message, fix }.
 
-export const RULE_CLASSES = ['comment', 'naming', 'testfile', 'commit', 'prose'];
+export const RULE_CLASSES = ['comment', 'naming', 'testfile', 'commit', 'prose', 'style'];
 
 const MAX_LINE_LEN = 2000; // longer lines are minified/generated; skip before regex
 const MAX_BRACE_SCAN_LINES = 2000; // bound on the test-body brace walk
@@ -38,9 +38,12 @@ export const MAX_FILE_LINES = 10000;
 export const MAX_FILE_BYTES = 1024 * 1024;
 export const MAX_SUBJECT_LEN = 100;
 
-// Below this a file is too small for the ratio to mean anything: a 3-line helper
-// with a 4-line header comment is fine.
+// Below either floor a file is too small for the ratio to mean anything. Both sides
+// need a floor: a one-function module with a header explaining the trap it exists for
+// clears the comment floor on the header alone, and no edit short of deleting the
+// explanation gets it back under the line.
 export const MIN_DENSITY_COMMENTS = 6;
+export const MIN_DENSITY_CODE = 10;
 
 // ---------------------------------------------------------------------------
 // small helpers shared by rules
@@ -197,6 +200,15 @@ const RULER = /[=\-*#~_─━═╌]{4,}|^\s*[=\-*#~─━═╌]{2,}\s.*\s[=\-*
 const VERB_LED = /^(?:is|has|can|should|get|set|parse|assert|expect|to|as|from|make|new|read|write|format|render|build|create|ensure|validate|check|random|next|find|coerce|cast|convert)(?=[A-Z_])/;
 
 const OBVIOUS_LABEL = /^(?:constructor|getters?|setters?|imports?|exports?|variables?|constants?|helpers?|helper functions?|main|main function|properties|methods|types?|interfaces?|state|props|utils|utilities|initialization|init|setup|cleanup|teardown|start|begin|end|done|dependencies|configuration|config)(?:\s+section)?$/i;
+
+// A regex literal is soup with `?`: `(?:`, `(?=`, `[x]?`, lazy `*?`/`+?` all use it as a
+// quantifier/lookaround marker, not a ternary. There is no reliable per-character way to
+// tell those apart from a real ternary `?` (a quantifier can be followed by anything the
+// rest of the pattern needs), so a line that looks like it opens a regex literal is
+// skipped for ternary-counting entirely rather than guessed at.
+// Every `?` in these is a regex quantifier, glob, or Rust's `?` operator — never a ternary.
+const NO_QUESTION_TERNARY = new Set(['py', 'go', 'rs', 'sql', 'sh', 'bash', 'md']);
+const REGEX_LITERAL_HINT =/^\s*\/|(?:=|\(|,|:|&&|\|\||\breturn\b|\.(?:test|match|matchAll|replace|replaceAll|split))\s*\//;
 
 // ---------------------------------------------------------------------------
 // the rules
@@ -377,6 +389,8 @@ export const RULES = [
         else code++;
       }
       if (commentLines.length < ctx.options.minComments) return;
+      // A file with no code at all is a stub or a licence header, not a density problem.
+      if (code < ctx.options.minCode) return;
       if (commentLines.length <= code) return;
       // The counted lines go in the excerpt so the cheap way to comply is deleting
       // narration, not deleting whichever comment happens to be longest — which is
@@ -438,6 +452,29 @@ export const RULES = [
     fix: 'Say what it holds or does: processData → normalizeInvoiceRows, helper → formatCurrency.',
     match: nameRule((name) =>
       /^(?:data|info|handle|process|manager|helper|util|utils|stuff|temp|tmp|obj|thing|item|value|val|result|res|foo|bar|baz|doStuff|doIt|handleData|processData|getData|doWork)$/i.test(name)),
+  },
+
+  // --- style ----------------------------------------------------------------
+  {
+    id: 'style-nested-ternary',
+    classes: ['style'],
+    severity: 'warn',
+    message: 'Nested ternary — a ternary inside another ternary\'s branch reads left-to-right but evaluates outside-in.',
+    fix: 'Rewrite as if/else, or extract each branch into a named function.',
+    // Ternary `?` only: `?.` (optional chaining), `??` (nullish coalescing), and
+    // `?:` (an optional param/property with nothing between the `?` and the `:`,
+    // which a real ternary can never have — its branch is never empty) are excluded.
+    // Two or more on one line is the tripwire; a single ternary is normal, idiomatic
+    // code and stays quiet.
+    match: function* (ctx) {
+      if (NO_QUESTION_TERNARY.has(ctx.lang)) return;
+      for (const { n, text } of ctx.codeLines()) {
+        if (commentText(text, ctx.lang) !== null && commentStart(ctx.lang).test(text)) continue;
+        if (REGEX_LITERAL_HINT.test(text)) continue;
+        const ternaryOps = (text.match(/(?<!\?)\?(?![.:?])/g) || []).length;
+        if (ternaryOps >= 2) yield { line: n, excerpt: text.trim() };
+      }
+    },
   },
 
   // --- testfile -----------------------------------------------------------
@@ -746,7 +783,7 @@ export { UnknownRuleError };
 // it doesn't. A threshold is only tunable if it appears here.
 export const RULE_OPTIONS = {
   'commit-subject-too-long': { max: MAX_SUBJECT_LEN },
-  'comment-density': { minComments: MIN_DENSITY_COMMENTS },
+  'comment-density': { minComments: MIN_DENSITY_COMMENTS, minCode: MIN_DENSITY_CODE },
 };
 
 /**
