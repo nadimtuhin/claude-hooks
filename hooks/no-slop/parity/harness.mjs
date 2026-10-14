@@ -61,9 +61,10 @@ function nodeSide(fn) {
   }
 }
 
-function goRun(kind, inputs) {
+function goRun(kind, inputs, timeout) {
   const dumpArgs = budgetMode ? ['__dump', kind, '--budget'] : ['__dump', kind];
-  const run = spawnSync(goBin, dumpArgs, { input: JSON.stringify(inputs), maxBuffer: 1 << 30, encoding: 'utf8' });
+  const run = spawnSync(goBin, dumpArgs, { input: JSON.stringify(inputs), maxBuffer: 1 << 30, encoding: 'utf8', timeout });
+  if (run.error?.code === 'ETIMEDOUT') return { error: `killed after ${timeout}ms` };
   if (run.status !== 0) return { error: firstLine(run.stderr).replace(/^no-slop: (?:Error: )?/, '') };
   return { items: JSON.parse(run.stdout) };
 }
@@ -230,6 +231,38 @@ function runGeneratedOversize() {
   }
 }
 
+const WALL_CLOCK_LIMIT_MS = 1000;
+
+// Each file has a finding before and after the slow line, so a side that gives up early reports a different set.
+const pathologicalFiles = {
+  'glob-body.spec.ts': () => `// as you requested\nit('globs', () => {\n${"  expect(match('src/*.ts', 'a/b.ts')).toBe(true);\n".repeat(1500)}});\n// per your review feedback\n`,
+  'comment-openers.ts': () => `// as you requested\na${'//x'.repeat(20000)}\r\n// per your review feedback\n`,
+  'backslash-title.spec.ts': () => `// as you requested\nit('${'\\'.repeat(44)}\n\n// per your review feedback\n`,
+};
+
+function comparePathological(dir) {
+  for (const [name, make] of Object.entries(pathologicalFiles)) {
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, make());
+    const t0 = performance.now();
+    const node = nodeSide(() => nodeHandlers.files(file));
+    const nodeMs = performance.now() - t0;
+    const t1 = performance.now();
+    const goRaw = goRun('files', [file], WALL_CLOCK_LIMIT_MS * 5);
+    const go = goRaw.items ? normaliseGo(goRaw.items[0]) : { error: goRaw.error };
+    const goMs = performance.now() - t1;
+    const a = JSON.stringify(node);
+    const b = JSON.stringify(go);
+    const found = node.findings?.length ?? 0;
+    const problems = [];
+    if (a !== b) problems.push('findings differ');
+    if (!found) problems.push('no findings, the file cannot show where a side stopped');
+    if (nodeMs > WALL_CLOCK_LIMIT_MS || goMs > WALL_CLOCK_LIMIT_MS) problems.push(`over ${WALL_CLOCK_LIMIT_MS}ms`);
+    report.push({ corpus: `budget:${name} (node ${nodeMs.toFixed(0)}ms, go ${goMs.toFixed(0)}ms)`, items: 1, findings: found, diffs: problems.length ? 1 : 0 });
+    if (problems.length) diffs.push({ corpus: 'budget:' + name, input: problems.join('; '), node: a.slice(0, 600), go: b.slice(0, 600) });
+  }
+}
+
 function runBudget() {
   const hookDir = path.join(here, '..');
   const slow = ['slop-rules.mjs', 'hook.mjs', 'slop-rules.test.mjs'].map((n) => path.join(hookDir, n));
@@ -239,6 +272,7 @@ function runBudget() {
     fs.writeFileSync(quadratic, `${'a:'.repeat(999)}a\n`.repeat(499));
     const files = [...listAll(fixturesDir), ...slow, quadratic];
     compare('budget:files', 'files', files, (p) => path.relative(hookDir, p));
+    comparePathological(dir);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -270,9 +304,10 @@ if (budgetMode) {
   if (!fixturesOnly) compare('prose:transcripts', 'prose', assistantTexts(maxProse));
 }
 
+const corpusWidth = budgetMode ? 62 : 34;
 const pad = (s, n) => String(s).padEnd(n);
-console.log(`${pad('corpus', 34)}${pad('items', 9)}${pad('findings', 10)}diffs`);
-for (const r of report) console.log(`${pad(r.corpus, 34)}${pad(r.items, 9)}${pad(r.findings, 10)}${r.diffs}`);
+console.log(`${pad('corpus', corpusWidth)}${pad('items', 9)}${pad('findings', 10)}diffs`);
+for (const r of report) console.log(`${pad(r.corpus, corpusWidth)}${pad(r.items, 9)}${pad(r.findings, 10)}${r.diffs}`);
 const knownRuleIds = [...RULES.map((r) => r.id), 'file-too-large', 'pragma-bare'];
 const uncovered = budgetMode ? [] : knownRuleIds.filter((id) => !rulesSeen.has(id));
 if (!budgetMode) {
