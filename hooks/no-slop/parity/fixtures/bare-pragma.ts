@@ -1,0 +1,1 @@
+const userObject = {}; // slop-ok

@@ -2,3 +2,4 @@ settings.json.bak.*
 .DS_Store
 node_modules/
 hooks/no-slop/go/no-slop
+!hooks/no-slop/parity/fixtures/**/.no-slop-baseline.json

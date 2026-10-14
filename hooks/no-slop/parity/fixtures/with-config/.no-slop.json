@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "comment-provenance": "block",
+    "naming-redundant-type-suffix": "off",
+    "comment-density": {
+      "minComments": 2,
+      "minCode": 2,
+      "severity": "block"
+    }
+  }
+}

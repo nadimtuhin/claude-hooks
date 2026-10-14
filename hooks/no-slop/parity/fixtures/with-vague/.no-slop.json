@@ -1,0 +1,5 @@
+{
+  "rules": {
+    "naming-vague-generic": "warn"
+  }
+}
