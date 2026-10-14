@@ -13,7 +13,7 @@ var (
 	httpColonEndRe   = mustJS(`https?:$`, false)
 	declKeywordRe    = mustJS(`\b(?:function|class|interface|type|struct|def|func|const|let|var|enum)\s+([A-Za-z_$][\w$]*)`, false)
 	declArrowRe      = mustJS(`\b([A-Za-z_$][\w$]*)\s*[:=]\s*(?:async\s*)?\(?[^)=;]*\)?\s*=>`, false)
-	testTitleRe      = mustJS(`\b(?:it|test|describe|context|suite)\s*(?:\.\w+)?\s*\(\s*(['"\x60])((?:\\.|(?!\1).)*)\1`, false)
+	testTitleRe      = mustJS(`\b(?:it|test|describe|context|suite)\s*(?:\.\w+)?\s*\(\s*(['"\x60])((?:\\.|(?!\1)[^\\\n\r\u2028\u2029])*)\1`, false)
 
 	provenanceRe   = mustJS(`\b(?:as (?:you |the user )?(?:requested|asked|suggested)|per (?:your|the) (?:request|review|feedback|suggestion|comment)|as per (?:your|the) \w+|address(?:es|ing)? (?:the )?(?:review |reviewer )?(?:feedback|comments?)|in response to (?:your|the) (?:feedback|review|comment)|based on (?:your|the) feedback|you (?:asked|requested|wanted|mentioned)|as (?:we )?discussed(?: (?:above|earlier|offline))?|per (?:our|the) (?:discussion|conversation|chat))\b`, true)
 	ticketRefRe    = mustJS(`(?:#\d+|https?://\S+|[A-Z]{2,}-\d+)`, false)
@@ -49,12 +49,12 @@ var (
 	vagueTitleRe       = mustJS(`^(?:should\s+)?(?:works?|work correctly|work as expected|be ok|pass|passes|test|tests|it works?|does the thing|handles? it|succeeds?|returns? correctly|behaves? correctly|is correct|basic|basics|happy path|sanity)\.?$`, true)
 
 	lineCommentTail  = mustJS(`//.*$`, false)
-	quotedLiteralRe  = mustJS(`(['"\x60])(?:\\.|(?!\1).)*\1`, false)
+	quotedLiteralRe  = mustJS(`(['"\x60])(?:\\.|(?!\1)[^\\\n\r\u2028\u2029])*\1`, false)
 	numberLiteralRe  = mustJS(`\b\d+(?:\.\d+)?\b`, false)
 	whitespaceRunRe  = mustJS(`\s+`, false)
 	bodyJunkRe       = mustJS(`[{}\s;]`, false)
 	assertionWordRe  = mustJS(`\b(?:expect|assert|should|verify|\.to\.|chai)\b`, false)
-	testOpenerRe     = mustJS(`\b(?:it|test)\s*(?:\.\w+)?\s*\(\s*(['"\x60])((?:\\.|(?!\1).)*)\1\s*,\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>\s*\{`, false)
+	testOpenerRe     = mustJS(`\b(?:it|test)\s*(?:\.\w+)?\s*\(\s*(['"\x60])((?:\\.|(?!\1)[^\\\n\r\u2028\u2029])*)\1\s*,\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>\s*\{`, false)
 	trailingPeriodRe = mustJS(`[^.]\.$`, false)
 
 	fillerBareRe  = mustJS(`^(?:wip|misc\.?|updates?|changes?|fixes?|fixed|cleanup|clean ?up|stuff|various|final|temp|test|asdf|more (?:changes|work|fixes)|minor (?:fixes|changes|updates)|small (?:fix|change)|update code|fix stuff|refactor)\b\W*$`, true)
