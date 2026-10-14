@@ -772,6 +772,28 @@ describe('size and time gates', () => {
     assert.ok(r.truncated !== null, 'reports the truncation line');
   });
 
+  test('a quadratic-regex line run is cut off by the budget, not scanned to the end', () => {
+    // 499 lines never reached the old every-500th-line clock check.
+    const line = `${'a:'.repeat(999)}a`;
+    const started = Date.now();
+    scan(Array(499).fill(line).join('\n'), { ruleClasses: CODE });
+    assert.ok(Date.now() - started < 1500, `took ${Date.now() - started}ms`);
+  });
+
+  test('a single huge line of test openers does not hang the test-body walk', () => {
+    const started = Date.now();
+    scan("it('a', (".repeat(100000), { ruleClasses: new Set([...CODE, 'testfile']) });
+    assert.ok(Date.now() - started < 1500, `took ${Date.now() - started}ms`);
+  });
+
+  test('the test-body walk stops when the budget is spent', () => {
+    let t = 0;
+    const now = () => (t += 1000);
+    const src = Array(400).fill("it('a', () => { expect(1).toBe(1); });").join('\n');
+    const r = scan(src, { ruleClasses: new Set(['testfile']), budgetMs: 200, now });
+    assert.ok(r.truncated !== null);
+  });
+
   test('a clean file produces no findings at all', () => {
     const src = [
       'export function parseInvoice(raw) {',

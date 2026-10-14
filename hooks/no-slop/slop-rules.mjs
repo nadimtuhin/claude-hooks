@@ -16,7 +16,7 @@
 //                tunable threshold (see RULE_OPTIONS). Read severity and options
 //                only through validateConfig / ruleOptions — a site that
 //                string-compares the raw value silently ignores the object form.
-//   budgetMs     wall-clock ceiling, checked every 500 lines.
+//   budgetMs     wall-clock ceiling, checked on every line.
 //
 //   returns { findings, truncated }
 //
@@ -93,7 +93,8 @@ const DECL_ARROW = /\b([A-Za-z_$][\w$]*)\s*[:=]\s*(?:async\s*)?\(?[^)=;]*\)?\s*=
 
 function declaredNames(line) {
   const names = [];
-  for (const re of [DECL_KEYWORD, DECL_ARROW]) {
+  // DECL_ARROW is quadratic on `a:a:a:` runs and cannot match without a literal `=>`.
+  for (const re of line.includes('=>') ? [DECL_KEYWORD, DECL_ARROW] : [DECL_KEYWORD]) {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(line))) names.push(m[1]);
@@ -873,11 +874,13 @@ function blankFenceInteriors(lines) {
  * Walk brace-delimited test bodies. Bounded so a minified fixture cannot make
  * this quadratic; on overrun the caller gets a truncation signal instead.
  */
-function collectTestBodies(lines) {
+function collectTestBodies(lines, overBudget = () => false) {
   const bodies = [];
   let overran = false;
   const opener = /\b(?:it|test)\s*(?:\.\w+)?\s*\(\s*(['"`])((?:\\.|(?!\1).)*)\1\s*,\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>\s*\{/;
   for (let i = 0; i < lines.length; i++) {
+    if (overBudget()) { overran = true; break; }
+    if (lines[i].length > MAX_LINE_LEN) continue;
     const m = lines[i].match(opener);
     if (!m) continue;
     // depth 0 means "directly inside the opening brace"; the `}` that closes
@@ -968,7 +971,7 @@ export function scan(text, opts = {}) {
 
   const codeLines = function* () {
     for (let i = 0; i < lines.length; i++) {
-      if (i % 500 === 0 && now() - start > budgetMs) {
+      if (now() - start > budgetMs) {
         truncated = i + 1;
         lastLine = i;
         return;
@@ -988,7 +991,7 @@ export function scan(text, opts = {}) {
     isTrailer: (l) => /^(?:Co-Authored-By|Claude-Session|Signed-off-by|Reviewed-by|Tested-by|Acked-by|Cc|Fixes|Refs):/i.test(l.trim()),
     testBodies: () => {
       if (!bodiesCache) {
-        const r = collectTestBodies(lines);
+        const r = collectTestBodies(lines, () => now() - start > budgetMs);
         bodiesCache = r.bodies;
         if (r.overran) truncated = truncated ?? lastLine;
       }
