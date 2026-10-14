@@ -17,7 +17,7 @@ bad()  { printf '  FAIL %s\n' "$1" >&2; [ $# -gt 1 ] && printf '       %s\n' "$2
 check(){ if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected [$3], got [$2]"; fi; }
 section(){ printf '\n== %s\n' "$1"; }
 
-HOOK="node $REPO/hooks/no-slop/hook.mjs"
+HOOK="${NO_SLOP_BIN:-node $REPO/hooks/no-slop/hook.mjs}"  # NO_SLOP_BIN=path/to/go/no-slop runs the same checks on the Go port
 
 # ---------------------------------------------------------------------------
 section 'unit tests'

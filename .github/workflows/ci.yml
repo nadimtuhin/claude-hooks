@@ -15,6 +15,23 @@ jobs:
           node-version: '22'
       - run: cd hooks/no-slop && node --test
 
+  # The Go port must stay byte-for-byte equivalent to hook.mjs. Only the committed
+  # fixtures run here; the local-repo corpora are a developer-machine check.
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: hooks/no-slop/go/go.mod
+          cache-dependency-path: hooks/no-slop/go/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: cd hooks/no-slop/go && go vet ./... && go test ./... && go build -o no-slop .
+      - run: node hooks/no-slop/parity/harness.mjs --fixtures-only
+      - run: node hooks/no-slop/parity/cli-replay.mjs
+
   # Alpine/musl is where the interesting failures live: BusyBox ash cannot run
   # the bash hooks, and glibc-linked ripgrep fails silently rather than crashing.
   e2e:
