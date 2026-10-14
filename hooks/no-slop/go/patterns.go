@@ -48,7 +48,6 @@ var (
 	assertWordRe       = mustJS(`expect|assert|should`, false)
 	vagueTitleRe       = mustJS(`^(?:should\s+)?(?:works?|work correctly|work as expected|be ok|pass|passes|test|tests|it works?|does the thing|handles? it|succeeds?|returns? correctly|behaves? correctly|is correct|basic|basics|happy path|sanity)\.?$`, true)
 
-	blockCommentRe   = mustJS(`/\*[\s\S]*?\*/`, false)
 	lineCommentTail  = mustJS(`//.*$`, false)
 	quotedLiteralRe  = mustJS(`(['"\x60])(?:\\.|(?!\1).)*\1`, false)
 	numberLiteralRe  = mustJS(`\b\d+(?:\.\d+)?\b`, false)

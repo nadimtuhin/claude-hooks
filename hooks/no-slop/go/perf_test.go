@@ -81,3 +81,45 @@ func TestRepeatedLineIsConvertedToUnitsOnce(t *testing.T) {
 		t.Fatal("cache returned units for the wrong string")
 	}
 }
+
+var perfTestfileClasses = map[string]bool{"comment": true, "naming": true, "style": true, "testfile": true}
+
+func scanTestfile(t *testing.T, name, text string, limit time.Duration) {
+	t.Helper()
+	start := time.Now()
+	scan(text, newScanOptions("ts", perfTestfileClasses, Config{}))
+	if elapsed := time.Since(start); elapsed > limit {
+		t.Fatalf("%s: scan took %v, want under %v", name, elapsed, limit)
+	}
+}
+
+// Every `/*` in a glob opens a block comment that never closes; the lazy regex rescans to the end of the body for each one.
+func TestGlobHeavyTestBodyIsScannedQuickly(t *testing.T) {
+	body := strings.Repeat("    expect(match('src/*.ts', 'a/b.ts')).toBe(true);\n", 1500)
+	scanTestfile(t, "glob body", "it('globs', () => {\n"+body+"});\n", time.Second)
+}
+
+func TestUnclosedBlockCommentOpenersAreLinear(t *testing.T) {
+	scanTestfile(t, "60KB of /* ", "it('x', () => {\n"+strings.Repeat("/* ", 20_000)+"\n});\n", time.Second)
+}
+
+func TestStripCommentsMatchesTheRegexReplacement(t *testing.T) {
+	cases := map[string][]string{
+		"a /* b */ c":              {"a  c"},
+		"a /* b */ c /* d */ e":    {"a  c  e"},
+		"a /*/ b */ c":             {"a  c"},
+		"a /* open\nstill */ b":    {"a  b"},
+		"a /* unclosed /* b":       {"a /* unclosed /* b"},
+		"x /* a */ y /* open":      {"x  y /* open"},
+		"x // tail /* not a block": {"x "},
+		"/**/":                     {""},
+		"/***/ k":                  {" k"},
+		"s = 'src/*.ts'; // c":     {"s = 'src/*.ts'; "},
+	}
+	for in, want := range cases {
+		got := stripComments(in)
+		if strings.Join(got, "\n") != strings.Join(want, "\n") {
+			t.Errorf("stripComments(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
