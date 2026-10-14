@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "findings": {
+    "b.ts": [
+      "1:comment-provenance",
+      "3:naming-redundant-type-suffix"
+    ],
+    "sub/c.ts": [
+      "1:comment-provenance"
+    ]
+  }
+}

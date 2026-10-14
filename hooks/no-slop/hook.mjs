@@ -48,7 +48,7 @@ function repoRoot(from) {
  * A malformed file or an unknown rule id is a hard error naming the file — a
  * linter that silently disables itself is worse than no linter.
  */
-function loadConfig(dir) {
+export function loadConfig(dir) {
   const start = path.resolve(dir);
   const root = repoRoot(start);
   const chain = [];
@@ -180,7 +180,7 @@ function isSuppressed(directives, ruleId, line) {
   );
 }
 
-function scanFile(filePath, { config, extraClasses } = {}) {
+function scanFile(filePath, { config, extraClasses, budgetMs } = {}) {
   const text = fs.readFileSync(filePath, 'utf8');
   const classes = extraClasses ?? classesFor(filePath);
   const cfg = config ?? loadConfig(path.dirname(filePath));
@@ -188,6 +188,7 @@ function scanFile(filePath, { config, extraClasses } = {}) {
     lang: path.extname(filePath).replace('.', '') || 'unknown',
     ruleClasses: classes,
     config: cfg,
+    ...(budgetMs === undefined ? {} : { budgetMs }),
   });
   const directives = findDisableDirectives(text.split('\n'));
   return {
@@ -197,7 +198,13 @@ function scanFile(filePath, { config, extraClasses } = {}) {
   };
 }
 
-function* walk(dir) {
+/** The findings the write hook would act on for one file, baseline included. Used by the parity harness. */
+export function scanFileFindings(filePath, { extraClasses, budgetMs } = {}) {
+  const { findings } = scanFile(filePath, { extraClasses, budgetMs });
+  return applyBaseline(findings, findBaseline(path.dirname(filePath)), path.resolve(filePath));
+}
+
+export function* walk(dir) {
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
