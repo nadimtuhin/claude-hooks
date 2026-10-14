@@ -35,9 +35,9 @@ describe('contract', () => {
     assert.equal(new Set(RULES.map((r) => r.id)).size, RULES.length);
   });
 
-  test('22 of 31 rules are warn, 9 are block', () => {
-    assert.equal(RULES.length, 31);
-    assert.equal(RULES.filter((r) => r.severity === 'warn').length, 22);
+  test('23 of 32 rules are warn, 9 are block', () => {
+    assert.equal(RULES.length, 32);
+    assert.equal(RULES.filter((r) => r.severity === 'warn').length, 23);
     assert.equal(RULES.filter((r) => r.severity === 'block').length, 9);
   });
 
@@ -639,6 +639,7 @@ describe('pragma suppression', () => {
     'naming-versioned-suffix': [CODE, 'function parseConfigV2() {}'],
     'naming-redundant-type-suffix': [CODE, 'const userObject = {};'],
     'naming-vague-generic': [CODE, 'function processData() {}', { 'naming-vague-generic': 'warn' }],
+    'style-nested-ternary': [['style'], 'const x = a ? b ? 1 : 2 : 3;'],
     'testfile-unconditional-skip': [TEST, "it.skip('adds', () => {});"],
     'testfile-only': [TEST, "it.only('adds', () => { expect(1).toBe(2); });"],
     'testfile-empty-body': [TEST, "it('adds two things', () => {});"],
@@ -655,7 +656,9 @@ describe('pragma suppression', () => {
     'commit-filler': [['commit'], 'wip'],
     'commit-provenance': [['commit'], 'fix parser\n\nAddressing review feedback'],
     'commit-body-narration': [['commit'], 'fix parser\n\nChanges made:\n- x'],
-    'comment-density': [['comment'], '// a\n// b\n// c\n// d\n// e\n// f\n// g\nconst x = 1;'],
+    // minCode lowered so the sample can stay short; the default floor is covered in its own block.
+    'comment-density': [['comment'], '// a\n// b\n// c\n// d\n// e\n// f\n// g\nconst x = 1;',
+      { 'comment-density': { minCode: 1 } }],
     'marketing-superlative': [['prose'], 'notes\na cutting-edge parser'],
     'prose-opener': [['prose'], 'notes\nGreat question!'],
     'prose-vocabulary-tells': [['prose'], 'notes\nLet me delve into the logs.'],
@@ -895,9 +898,10 @@ describe('section banner: labelled blocks are navigation, not noise', () => {
 
 describe('comment-density', () => {
   const heavy = [
-    '// one', '// two', '// three', '// four', '// five', '// six', '// seven',
-    'const a = 1;',
-    'const b = 2;',
+    '// one', '// two', '// three', '// four', '// five', '// six',
+    '// seven', '// eight', '// nine', '// ten', '// eleven',
+    'const a = 1;', 'const b = 2;', 'const c = 3;', 'const d = 4;', 'const e = 5;',
+    'const f = 6;', 'const g = 7;', 'const h = 8;', 'const i = 9;', 'const j = 10;',
   ].join('\n');
 
   const lean = [
@@ -920,6 +924,31 @@ describe('comment-density', () => {
     assert.ok(!fires('comment-density', tiny, CODE, { lang: 'ts' }));
   });
 
+  test('silent below the minimum code count', () => {
+    // The shape that made this floor necessary: one small function whose header explains
+    // the trap it exists for. Clears the comment floor on the header alone, and the only
+    // edit that gets it under the ratio is deleting the explanation.
+    const oneFunction = [
+      '/**', ' * one', ' * two', ' * three', ' * four', ' * five', ' */',
+      'export function go(x) {', '  return x + 1;', '}',
+    ].join('\n');
+    assert.ok(!fires('comment-density', oneFunction, CODE, { lang: 'ts' }));
+  });
+
+  test('silent on a file with no code at all', () => {
+    const headerOnly = Array.from({ length: 20 }, (_, i) => `// line ${i}`).join('\n');
+    assert.ok(!fires('comment-density', headerOnly, CODE, { lang: 'ts' }));
+  });
+
+  test('minCode is tunable, like minComments', () => {
+    const short = ['// a', '// b', '// c', '// d', '// e', '// f', '// g',
+      'const a = 1;', 'const b = 2;'].join('\n');
+    assert.ok(!fires('comment-density', short, CODE, { lang: 'ts' }));
+    assert.ok(fires('comment-density', short, CODE, {
+      lang: 'ts', config: { 'comment-density': { minCode: 2 } },
+    }));
+  });
+
   test('blank lines count as neither', () => {
     const spaced = heavy.split('\n').join('\n\n');
     assert.ok(fires('comment-density', spaced, CODE, { lang: 'ts' }));
@@ -939,7 +968,7 @@ describe('comment-density', () => {
     const found = scan(heavy, { ruleClasses: CODE, lang: 'ts' }).findings
       .filter((f) => f.ruleId === 'comment-density');
     assert.equal(found.length, 1);
-    assert.match(found[0].excerpt, /7 comment vs 2 code; lines 1-7/);
+    assert.match(found[0].excerpt, /11 comment vs 10 code; lines 1-11/);
   });
 
   test('trailing comments count as code, not comment', () => {
@@ -1136,10 +1165,11 @@ describe('rule options', () => {
   });
 
   test('comment-density minComments is tunable', () => {
-    const four = ['// a', '// b', '// c', '// d', 'const x = 1;'].join('\n');
+    const four = ['// a', '// b', '// c', '// d',
+      'const a = 1;', 'const b = 2;', 'const c = 3;'].join('\n');
     assert.ok(!fires('comment-density', four, CODE, { lang: 'ts' }));
     assert.ok(fires('comment-density', four, CODE, {
-      lang: 'ts', config: { 'comment-density': { minComments: 4 } },
+      lang: 'ts', config: { 'comment-density': { minComments: 4, minCode: 3 } },
     }));
   });
 
@@ -1177,4 +1207,13 @@ describe('rule options', () => {
     const only = validateConfig({ 'commit-subject-too-long': { max: 72 } });
     assert.ok(!('severity' in only['commit-subject-too-long']));
   });
+});
+
+describe('style-nested-ternary: languages without a ?: ternary', () => {
+  const PY_REGEX = 'cm = re.compile(r"^(feat|fix)(\\(.+?\\))?!?:|#\\d+", re.I)';
+  test('python regex is quiet', () => assert.ok(!fires('style-nested-ternary', PY_REGEX, ['style'], { lang: 'py' })));
+  test('rust ? operator is quiet', () =>
+    assert.ok(!fires('style-nested-ternary', 'let v = load()?.parse()?;', ['style'], { lang: 'rs' })));
+  test('js nested ternary still fires', () =>
+    assert.ok(fires('style-nested-ternary', 'const x = a ? b ? 1 : 2 : 3;', ['style'], { lang: 'js' })));
 });
