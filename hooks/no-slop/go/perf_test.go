@@ -123,3 +123,28 @@ func TestStripCommentsMatchesTheRegexReplacement(t *testing.T) {
 		}
 	}
 }
+
+func TestPragmaPassSkipsLongLinesWithoutAPragma(t *testing.T) {
+	line := "a" + strings.Repeat("//x", 20_000) + "\r"
+	start := time.Now()
+	pragmaMap([]string{line}, "ts")
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("pragmaMap took %v on a line with no pragma, want under 1s", elapsed)
+	}
+}
+
+func TestCommitMessageLineOfCommentOpenersDoesNotStall(t *testing.T) {
+	message := "a" + strings.Repeat("//x", 15_000) + "\r\n\nbody"
+	start := time.Now()
+	scan(message, newScanOptions("unknown", map[string]bool{"commit": true}, Config{}))
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("commit scan took %v, want under 1s", elapsed)
+	}
+}
+
+func TestPragmaAfterManyCommentOpenersStillApplies(t *testing.T) {
+	got := pragmaMap([]string{"const userObject = 1; " + strings.Repeat("//x", 50) + " slop-ok: naming-redundant-type-suffix"}, "ts")
+	if !got.byLine[1]["naming-redundant-type-suffix"] || !got.byLine[2]["naming-redundant-type-suffix"] {
+		t.Fatalf("pragma lost: %+v", got)
+	}
+}

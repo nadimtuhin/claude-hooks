@@ -794,6 +794,25 @@ describe('size and time gates', () => {
     assert.ok(r.truncated !== null);
   });
 
+  test('the pragma pass skips a long line of comment openers that cannot hold a pragma', () => {
+    const line = `a${'//x'.repeat(20000)}\r`;
+    const started = Date.now();
+    scan(line, { ruleClasses: CODE });
+    assert.ok(Date.now() - started < 1000, `took ${Date.now() - started}ms`);
+  });
+
+  test('a commit message line of comment openers does not stall the pragma pass', () => {
+    const line = `a${'//x'.repeat(15000)}\r\n\nbody`;
+    const started = Date.now();
+    scan(line, { ruleClasses: ['commit'] });
+    assert.ok(Date.now() - started < 1000, `took ${Date.now() - started}ms`);
+  });
+
+  test('a pragma after a long run of comment openers still applies', () => {
+    const src = `const userObject = 1; ${'//x'.repeat(50)} slop-ok: naming-redundant-type-suffix`;
+    assert.equal(fires('naming-redundant-type-suffix', src), false);
+  });
+
   test('a clean file produces no findings at all', () => {
     const src = [
       'export function parseInvoice(raw) {',

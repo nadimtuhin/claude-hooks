@@ -118,6 +118,9 @@ type pragmas struct {
 func pragmaMap(lines []string, lang string) pragmas {
 	p := pragmas{byLine: map[int]map[string]bool{}}
 	for i, text := range lines {
+		if !strings.Contains(text, "slop-ok") {
+			continue
+		}
 		comment, ok := commentText(text, lang)
 		if !ok {
 			continue
