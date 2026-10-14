@@ -750,6 +750,8 @@ export function pragmaMap(lines, lang = 'unknown') {
   const map = new Map();
   const bare = [];
   lines.forEach((text, i) => {
+    // The pragma regex needs this literal; commentText backtracks badly on long lines without it.
+    if (!text.includes('slop-ok')) return;
     // Only inside a comment. Otherwise prose that merely mentions the pragma,
     // or a string literal containing it, would suppress real findings.
     const comment = commentText(text, lang);
