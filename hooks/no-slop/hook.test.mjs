@@ -136,8 +136,8 @@ describe('write mode', () => {
   test('warn output is capped at 3 with a +N more line', () => {
     write('many.ts', Array.from({ length: 9 }, (_, i) => `// set the value ${i}\nsetTheValue${i}();`).join('\n'));
     const r = run(['write'], { stdin: JSON.stringify({ tool_input: { file_path: path.join(dir, 'many.ts') } }) });
-    assert.equal((r.stderr.match(/\[WARN\]/g) ?? []).length, 3);
-    assert.match(r.stderr, /\+\d+ more warning/);
+    assert.equal((r.stderr.match(/\(warn\)/g) ?? []).length, 3);
+    assert.match(r.stderr, /\+\d+ more: no-slop scan/);
   });
 });
 
@@ -370,7 +370,7 @@ describe('write mode: tool input shapes and comment density', () => {
       const r = run(['write'], { stdin: payload(tool, 'heavy.ts') });
       assert.equal(r.code, 2);
       assert.match(r.stderr, /comment-density/);
-      assert.match(r.stderr, /11 comment vs 10 code/);
+      assert.match(r.stderr, /heavy\.ts:1 comment-density \(warn\)/);
     });
   }
 

@@ -348,9 +348,9 @@ async function modeWrite() {
   if (!fresh.length) return 0;
 
   const { shown, hidden } = capped(fresh);
-  process.stderr.write(`no-slop found ${fresh.length} issue(s) in ${rel}:\n${render(shown, { file: rel })}\n`);
-  if (hidden) process.stderr.write(`  +${hidden} more warning(s) — see: no-slop scan ${rel} --all\n`);
-  process.stderr.write('These are style tripwires, not a build failure. Fix what is genuinely slop and move on.\n');
+  const lines = shown.map((f) => `${rel}:${f.line} ${f.ruleId} (${f.severity})`);
+  process.stderr.write(`no-slop:\n${lines.join("\n")}\n`);
+  if (hidden) process.stderr.write(`+${hidden} more: no-slop scan ${rel} --all\n`);
   return 2;
 }
 
