@@ -15,6 +15,8 @@ const (
 	baselineFile = ".no-slop-baseline.json"
 	configFile   = ".no-slop.json"
 	warnCap      = 3
+	// maxPayloadBytes caps a hook's stdin JSON; a larger payload is treated like an unparseable one.
+	maxPayloadBytes = 64 << 20
 )
 
 var (
@@ -71,7 +73,14 @@ func (a *app) readStdin() string {
 }
 
 func (a *app) readPayload() *jval {
-	raw := jsTrim(a.readStdin())
+	if a.stdin == nil {
+		return newObject()
+	}
+	b, err := io.ReadAll(io.LimitReader(a.stdin, maxPayloadBytes+1))
+	if err != nil || len(b) > maxPayloadBytes {
+		return newObject()
+	}
+	raw := jsTrim(decodeUTF8(b))
 	if raw == "" {
 		return newObject()
 	}

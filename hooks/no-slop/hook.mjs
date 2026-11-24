@@ -255,8 +255,19 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+// A hook's stdin JSON; a larger payload is treated like an unparseable one.
+const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
+
 async function readPayload() {
-  const raw = (await readStdin()).trim();
+  if (process.stdin.isTTY) return {};
+  const chunks = [];
+  let size = 0;
+  for await (const c of process.stdin) {
+    size += c.length;
+    if (size > MAX_PAYLOAD_BYTES) return {};
+    chunks.push(c);
+  }
+  const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (!raw) return {};
   try {
     return JSON.parse(raw);

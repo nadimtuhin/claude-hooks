@@ -426,3 +426,16 @@ test('generated/ is excluded — ORM clients are never hand-edited', () => {
   assert.ok(isExcluded('/abs/src/generated/models/Protocol.ts'));
   assert.ok(!isExcluded('src/generators/report.ts'));
 });
+
+describe('hook payload size limit', () => {
+  const slop = JSON.stringify({ tool_input: { command: 'git commit -m "Add cutting-edge parser"' } });
+  for (const [label, pad, want] of [
+    ['a payload under 64 MiB is parsed', 1 << 20, 2],
+    ['a payload over 64 MiB fails open', 64 * 1024 * 1024 + 1, 0],
+  ]) {
+    test(label, () => {
+      const r = spawnSync(process.execPath, [HOOK, 'commit'], { input: slop + ' '.repeat(pad), maxBuffer: 1 << 30 });
+      assert.equal(r.status, want);
+    });
+  }
+});
