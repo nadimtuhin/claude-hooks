@@ -66,6 +66,29 @@ describe('commitMessage extraction', () => {
     assert.equal(commitMessage('git log --oneline'), null);
     assert.equal(commitMessage('ls -la'), null);
   });
+  // Same table as go/commit_gate_test.go: forms git accepts whose message is on the command line.
+  for (const [cmd, want] of [
+    ['git commit -m"Add cutting-edge parser"', 'Add cutting-edge parser'],
+    ["git commit -m'Add cutting-edge parser'", 'Add cutting-edge parser'],
+    ['git commit -am"Add cutting-edge parser"', 'Add cutting-edge parser'],
+    ['git commit -m "sub" -m"body"', 'sub\n\nbody'],
+    ['git commit -m "x" && find . -maxdepth 1', 'x'],
+    ['git commit -m"msg"&&echo hi', 'msg'],
+    ['git commit -m"msg";echo hi', 'msg'],
+    ["git commit -m'msg'|tee log", 'msg'],
+    ['git commit -m"msg">out', 'msg'],
+    ['git commit -m"a && b"&&echo hi', 'a && b'],
+    ['git commit -m "msg"&&echo hi', 'msg'],
+    ['git commit --message="msg";echo hi', 'msg'],
+    ["git commit -F - <<'EOF'\nAdd cutting-edge parser\nEOF", 'Add cutting-edge parser'],
+    ['git commit --file=- <<EOF\nAdd cutting-edge parser\nEOF', 'Add cutting-edge parser'],
+    ['git commit --file - <<EOF\nAdd cutting-edge parser\nEOF', 'Add cutting-edge parser'],
+    ['git commit -F -', null],
+    ['git commit -F msg.txt <<EOF\nx\nEOF', null],
+    ['git commit -F - --template t <<EOF\nx\nEOF', null],
+  ]) {
+    test(`visible form: ${JSON.stringify(cmd)}`, () => assert.equal(commitMessage(cmd), want));
+  }
   test('a word containing "commit" is not a commit', () => {
     assert.equal(commitMessage('echo "no commitment here"'), null);
   });
@@ -409,4 +432,17 @@ test('generated/ is excluded — ORM clients are never hand-edited', () => {
   assert.ok(isExcluded('prisma/generated/client.ts'));
   assert.ok(isExcluded('/abs/src/generated/models/Protocol.ts'));
   assert.ok(!isExcluded('src/generators/report.ts'));
+});
+
+describe('hook payload size limit', () => {
+  const slop = JSON.stringify({ tool_input: { command: 'git commit -m "Add cutting-edge parser"' } });
+  for (const [label, pad, want] of [
+    ['a payload under 64 MiB is parsed', 1 << 20, 2],
+    ['a payload over 64 MiB fails open', 64 * 1024 * 1024 + 1, 0],
+  ]) {
+    test(label, () => {
+      const r = spawnSync(process.execPath, [HOOK, 'commit'], { input: slop + ' '.repeat(pad), maxBuffer: 1 << 30 });
+      assert.equal(r.status, want);
+    });
+  }
 });

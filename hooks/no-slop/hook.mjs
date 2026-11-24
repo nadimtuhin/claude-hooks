@@ -255,8 +255,19 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+// A hook's stdin JSON; a larger payload is treated like an unparseable one.
+const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
+
 async function readPayload() {
-  const raw = (await readStdin()).trim();
+  if (process.stdin.isTTY) return {};
+  const chunks = [];
+  let size = 0;
+  for await (const c of process.stdin) {
+    size += c.length;
+    if (size > MAX_PAYLOAD_BYTES) return {};
+    chunks.push(c);
+  }
+  const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (!raw) return {};
   try {
     return JSON.parse(raw);
@@ -280,11 +291,13 @@ export function commitMessage(command) {
   // <dir> commit` puts -C before it, where it means "directory" — treating that as
   // --reuse-message silently skipped every commit made the way peyra's own docs
   // mandate. Match on the tail only.
-  const tail = command.slice(command.search(/\bcommit\b/));
+  let tail = command.slice(command.search(/\bcommit\b/));
+  const heredoc = command.match(/<<-?\s*(['"]?)(\w+)\1\s*\n([\s\S]*?)\n\s*\2\s*$|<<-?\s*(['"]?)(\w+)\4\s*\n([\s\S]*?)\n\s*\5\b/);
+  // `-F -` reads the message from stdin; when a heredoc after `commit` feeds it, the message is visible.
+  if (heredoc && tail.includes('<<')) tail = tail.replace(/\s(?:-F\s*|--file=|--file\s+)-(?=\s)/, ' ');
   if (/\s(?:-F|--file|--template|-t|-C|--reuse-message|--amend\b(?![^\n]*-m))\b/.test(tail)) return null;
 
   // Heredoc form: git commit -m "$(cat <<'EOF' ... EOF)"
-  const heredoc = command.match(/<<-?\s*(['"]?)(\w+)\1\s*\n([\s\S]*?)\n\s*\2\s*$|<<-?\s*(['"]?)(\w+)\4\s*\n([\s\S]*?)\n\s*\5\b/);
   if (heredoc) return (heredoc[3] ?? heredoc[6] ?? '').replace(/\s+$/, '');
 
   const messages = [];
@@ -292,17 +305,26 @@ export function commitMessage(command) {
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (t.raw === '-m' || t.raw === '--message') {
-      if (tokens[i + 1]) messages.push(tokens[++i].value);
+      if (tokens[i + 1] && !tokens[i + 1].op) messages.push(tokens[++i].value);
     } else if (t.raw.startsWith('--message=')) {
       messages.push(t.value.slice('--message='.length));
-    } else if (/^-[a-zA-Z]*m$/.test(t.raw) && tokens[i + 1]) {
+    } else if (/^-[a-zA-Z]*m$/.test(t.raw) && tokens[i + 1] && !tokens[i + 1].op) {
       messages.push(tokens[++i].value);
+    } else if (/^-[a-zA-Z]*m['"]/.test(t.raw)) {
+      // Stuck form, -m"msg": only quoted, so words like find's -maxdepth are not read as messages.
+      messages.push(t.value.slice(t.value.indexOf('m') + 1));
     }
   }
   return messages.length ? messages.join('\n\n') : null;
 }
 
-/** Shell-ish tokenizer: enough to find -m arguments, not a shell. */
+/**
+ * Shell-ish tokenizer: enough to find -m arguments, not a shell. Unquoted control
+ * and redirection characters end a word and become an `op` token, so -m"msg"&&echo
+ * yields the message `msg`, not `msg&&echo`.
+ */
+const SHELL_OPS = ';&|<>()';
+
 function tokenize(s) {
   const out = [];
   let raw = '';
@@ -324,6 +346,13 @@ function tokenize(s) {
     }
     if (c === '"' || c === "'") { quote = c; raw += c; continue; }
     if (/\s/.test(c)) { push(); continue; }
+    if (SHELL_OPS.includes(c)) {
+      push();
+      let ops = c;
+      while (i + 1 < s.length && SHELL_OPS.includes(s[i + 1])) ops += s[++i];
+      out.push({ raw: ops, value: ops, op: true });
+      continue;
+    }
     value += c;
     raw += c;
   }

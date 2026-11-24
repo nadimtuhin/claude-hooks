@@ -15,6 +15,8 @@ const (
 	baselineFile = ".no-slop-baseline.json"
 	configFile   = ".no-slop.json"
 	warnCap      = 3
+	// maxPayloadBytes caps a hook's stdin JSON; a larger payload is treated like an unparseable one.
+	maxPayloadBytes = 64 << 20
 )
 
 var (
@@ -27,6 +29,8 @@ var (
 	opaqueFlagRe   = mustJS(`\s(?:-F|--file|--template|-t|-C|--reuse-message|--amend\b(?![^\n]*-m))\b`, false)
 	heredocRe      = mustJS(`<<-?\s*(['"]?)(\w+)\1\s*\n([\s\S]*?)\n\s*\2\s*$|<<-?\s*(['"]?)(\w+)\4\s*\n([\s\S]*?)\n\s*\5\b`, false)
 	shortMessageRe = mustJS(`^-[a-zA-Z]*m$`, false)
+	stuckMessageRe = mustJS(`^-[a-zA-Z]*m['"]`, false)
+	stdinFileRe    = mustJS(`\s(?:-F\s*|--file=|--file\s+)-(?=\s)`, false)
 	storedSepRe    = mustJS(`[\x00\x1e]`, false)
 )
 
@@ -69,7 +73,14 @@ func (a *app) readStdin() string {
 }
 
 func (a *app) readPayload() *jval {
-	raw := jsTrim(a.readStdin())
+	if a.stdin == nil {
+		return newObject()
+	}
+	b, err := io.ReadAll(io.LimitReader(a.stdin, maxPayloadBytes+1))
+	if err != nil || len(b) > maxPayloadBytes {
+		return newObject()
+	}
+	raw := jsTrim(decodeUTF8(b))
 	if raw == "" {
 		return newObject()
 	}
@@ -423,7 +434,15 @@ func capped(findings []Finding, cap int) (shown []Finding, hidden int) {
 // ---------------------------------------------------------------------------
 // commit message extraction
 
-type shellToken struct{ raw, value string }
+type shellToken struct {
+	raw, value string
+	op         bool
+}
+
+// shellOps end a word outside quotes, as in hook.mjs's SHELL_OPS.
+const shellOps = ";&|<>()"
+
+func isShellOp(c rune) bool { return c < 128 && strings.ContainsRune(shellOps, c) }
 
 func tokenize(s string) []shellToken {
 	var out []shellToken
@@ -431,7 +450,7 @@ func tokenize(s string) []shellToken {
 	var quote rune
 	push := func() {
 		if len(raw) > 0 || len(value) > 0 {
-			out = append(out, shellToken{fromUnits(raw), fromUnits(value)})
+			out = append(out, shellToken{raw: fromUnits(raw), value: fromUnits(value)})
 		}
 		raw, value = nil, nil
 	}
@@ -463,6 +482,17 @@ func tokenize(s string) []shellToken {
 			push()
 			continue
 		}
+		if isShellOp(c) {
+			push()
+			ops := []rune{c}
+			for i+1 < len(units) && isShellOp(units[i+1]) {
+				i++
+				ops = append(ops, units[i])
+			}
+			op := fromUnits(ops)
+			out = append(out, shellToken{raw: op, value: op, op: true})
+			continue
+		}
 		value = append(value, c)
 		raw = append(raw, c)
 	}
@@ -476,10 +506,17 @@ func commitMessage(command string) (message string, ok bool) {
 		return "", false
 	}
 	tail := jsSlice(command, commitWordRe.Find(command).Index, sliceToEnd)
+	heredoc := heredocRe.Find(command)
+	// `-F -` reads the message from stdin; when a heredoc after `commit` feeds it, the message is visible.
+	if heredoc != nil && strings.Contains(tail, "<<") {
+		if m := stdinFileRe.Find(tail); m != nil {
+			tail = m.Prefix() + " " + m.Suffix()
+		}
+	}
 	if opaqueFlagRe.Test(tail) {
 		return "", false
 	}
-	if m := heredocRe.Find(command); m != nil {
+	if m := heredoc; m != nil {
 		body, found := m.Group(3)
 		if !found {
 			body, _ = m.Group(6)
@@ -492,15 +529,18 @@ func commitMessage(command string) (message string, ok bool) {
 		t := tokens[i]
 		switch {
 		case t.raw == "-m" || t.raw == "--message":
-			if i+1 < len(tokens) {
+			if i+1 < len(tokens) && !tokens[i+1].op {
 				i++
 				messages = append(messages, tokens[i].value)
 			}
 		case strings.HasPrefix(t.raw, "--message="):
 			messages = append(messages, jsSlice(t.value, len("--message="), sliceToEnd))
-		case shortMessageRe.Test(t.raw) && i+1 < len(tokens):
+		case shortMessageRe.Test(t.raw) && i+1 < len(tokens) && !tokens[i+1].op:
 			i++
 			messages = append(messages, tokens[i].value)
+		case stuckMessageRe.Test(t.raw):
+			// Stuck form, -m"msg": only quoted, so words like find's -maxdepth are not read as messages.
+			messages = append(messages, jsSlice(t.value, strings.IndexByte(t.value, 'm')+1, sliceToEnd))
 		}
 	}
 	if len(messages) == 0 {
