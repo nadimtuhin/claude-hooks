@@ -434,7 +434,15 @@ func capped(findings []Finding, cap int) (shown []Finding, hidden int) {
 // ---------------------------------------------------------------------------
 // commit message extraction
 
-type shellToken struct{ raw, value string }
+type shellToken struct {
+	raw, value string
+	op         bool
+}
+
+// shellOps end a word outside quotes, as in hook.mjs's SHELL_OPS.
+const shellOps = ";&|<>()"
+
+func isShellOp(c rune) bool { return c < 128 && strings.ContainsRune(shellOps, c) }
 
 func tokenize(s string) []shellToken {
 	var out []shellToken
@@ -442,7 +450,7 @@ func tokenize(s string) []shellToken {
 	var quote rune
 	push := func() {
 		if len(raw) > 0 || len(value) > 0 {
-			out = append(out, shellToken{fromUnits(raw), fromUnits(value)})
+			out = append(out, shellToken{raw: fromUnits(raw), value: fromUnits(value)})
 		}
 		raw, value = nil, nil
 	}
@@ -472,6 +480,17 @@ func tokenize(s string) []shellToken {
 		}
 		if isJSSpace(c) {
 			push()
+			continue
+		}
+		if isShellOp(c) {
+			push()
+			ops := []rune{c}
+			for i+1 < len(units) && isShellOp(units[i+1]) {
+				i++
+				ops = append(ops, units[i])
+			}
+			op := fromUnits(ops)
+			out = append(out, shellToken{raw: op, value: op, op: true})
 			continue
 		}
 		value = append(value, c)
@@ -510,13 +529,13 @@ func commitMessage(command string) (message string, ok bool) {
 		t := tokens[i]
 		switch {
 		case t.raw == "-m" || t.raw == "--message":
-			if i+1 < len(tokens) {
+			if i+1 < len(tokens) && !tokens[i+1].op {
 				i++
 				messages = append(messages, tokens[i].value)
 			}
 		case strings.HasPrefix(t.raw, "--message="):
 			messages = append(messages, jsSlice(t.value, len("--message="), sliceToEnd))
-		case shortMessageRe.Test(t.raw) && i+1 < len(tokens):
+		case shortMessageRe.Test(t.raw) && i+1 < len(tokens) && !tokens[i+1].op:
 			i++
 			messages = append(messages, tokens[i].value)
 		case stuckMessageRe.Test(t.raw):
