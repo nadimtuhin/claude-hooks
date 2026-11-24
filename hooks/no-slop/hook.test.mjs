@@ -66,6 +66,22 @@ describe('commitMessage extraction', () => {
     assert.equal(commitMessage('git log --oneline'), null);
     assert.equal(commitMessage('ls -la'), null);
   });
+  // Same table as go/commit_gate_test.go: forms git accepts whose message is on the command line.
+  for (const [cmd, want] of [
+    ['git commit -m"Add cutting-edge parser"', 'Add cutting-edge parser'],
+    ["git commit -m'Add cutting-edge parser'", 'Add cutting-edge parser'],
+    ['git commit -am"Add cutting-edge parser"', 'Add cutting-edge parser'],
+    ['git commit -m "sub" -m"body"', 'sub\n\nbody'],
+    ['git commit -m "x" && find . -maxdepth 1', 'x'],
+    ["git commit -F - <<'EOF'\nAdd cutting-edge parser\nEOF", 'Add cutting-edge parser'],
+    ['git commit --file=- <<EOF\nAdd cutting-edge parser\nEOF', 'Add cutting-edge parser'],
+    ['git commit --file - <<EOF\nAdd cutting-edge parser\nEOF', 'Add cutting-edge parser'],
+    ['git commit -F -', null],
+    ['git commit -F msg.txt <<EOF\nx\nEOF', null],
+    ['git commit -F - --template t <<EOF\nx\nEOF', null],
+  ]) {
+    test(`visible form: ${JSON.stringify(cmd)}`, () => assert.equal(commitMessage(cmd), want));
+  }
   test('a word containing "commit" is not a commit', () => {
     assert.equal(commitMessage('echo "no commitment here"'), null);
   });

@@ -280,11 +280,13 @@ export function commitMessage(command) {
   // <dir> commit` puts -C before it, where it means "directory" — treating that as
   // --reuse-message silently skipped every commit made the way peyra's own docs
   // mandate. Match on the tail only.
-  const tail = command.slice(command.search(/\bcommit\b/));
+  let tail = command.slice(command.search(/\bcommit\b/));
+  const heredoc = command.match(/<<-?\s*(['"]?)(\w+)\1\s*\n([\s\S]*?)\n\s*\2\s*$|<<-?\s*(['"]?)(\w+)\4\s*\n([\s\S]*?)\n\s*\5\b/);
+  // `-F -` reads the message from stdin; when a heredoc after `commit` feeds it, the message is visible.
+  if (heredoc && tail.includes('<<')) tail = tail.replace(/\s(?:-F\s*|--file=|--file\s+)-(?=\s)/, ' ');
   if (/\s(?:-F|--file|--template|-t|-C|--reuse-message|--amend\b(?![^\n]*-m))\b/.test(tail)) return null;
 
   // Heredoc form: git commit -m "$(cat <<'EOF' ... EOF)"
-  const heredoc = command.match(/<<-?\s*(['"]?)(\w+)\1\s*\n([\s\S]*?)\n\s*\2\s*$|<<-?\s*(['"]?)(\w+)\4\s*\n([\s\S]*?)\n\s*\5\b/);
   if (heredoc) return (heredoc[3] ?? heredoc[6] ?? '').replace(/\s+$/, '');
 
   const messages = [];
@@ -297,6 +299,9 @@ export function commitMessage(command) {
       messages.push(t.value.slice('--message='.length));
     } else if (/^-[a-zA-Z]*m$/.test(t.raw) && tokens[i + 1]) {
       messages.push(tokens[++i].value);
+    } else if (/^-[a-zA-Z]*m['"]/.test(t.raw)) {
+      // Stuck form, -m"msg": only quoted, so words like find's -maxdepth are not read as messages.
+      messages.push(t.value.slice(t.value.indexOf('m') + 1));
     }
   }
   return messages.length ? messages.join('\n\n') : null;
