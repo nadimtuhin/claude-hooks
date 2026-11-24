@@ -97,6 +97,24 @@ check 'a NEW finding still fires against a baseline' "$?" 1
 rm -f "$WORK/proj/.no-slop-baseline.json"
 
 # ---------------------------------------------------------------------------
+section 'engineering-discipline.sh keyword gate'
+# ---------------------------------------------------------------------------
+# Real UserPromptSubmit payloads carry permission_mode and hook_event_name; only
+# the prompt may trigger the directives. Columns: expected <TAB> label <TAB> payload.
+ED="$REPO/hooks/engineering-discipline.sh"
+while IFS=$'\t' read -r want label payload; do
+  out="$(printf '%s' "$payload" | bash "$ED")"
+  got=silent; [ -n "$out" ] && got=fires
+  check "engineering-discipline: $label" "$got" "$want"
+done <<'TABLE'
+fires	build verb in the prompt	{"session_id":"s","cwd":"/x","permission_mode":"default","hook_event_name":"UserPromptSubmit","prompt":"implement the parser"}
+silent	chat prompt in default mode	{"session_id":"s","cwd":"/x","permission_mode":"default","hook_event_name":"UserPromptSubmit","prompt":"what time is it"}
+silent	chat prompt in plan mode	{"session_id":"s","cwd":"/x","permission_mode":"plan","hook_event_name":"UserPromptSubmit","prompt":"what time is it"}
+silent	keyword only in cwd	{"session_id":"s","cwd":"/home/u/design-system","permission_mode":"default","hook_event_name":"UserPromptSubmit","prompt":"what time is it"}
+fires	plan in the prompt while in plan mode	{"session_id":"s","cwd":"/x","permission_mode":"plan","hook_event_name":"UserPromptSubmit","prompt":"plan the migration"}
+TABLE
+
+# ---------------------------------------------------------------------------
 section 'install.sh / uninstall.sh'
 # ---------------------------------------------------------------------------
 # A pristine settings.json carrying entries we must not touch. jq-normalized so

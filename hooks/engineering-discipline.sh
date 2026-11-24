@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Standing engineering directives — injected only on build/plan prompts (token-thrifty; silent otherwise).
-# Keyword-gated against the payload with path-bearing fields (cwd, transcript_path) stripped first,
-# so a keyword in a directory name (e.g. ~/design-system) can't false-trigger on every prompt.
+# Keyword-gated against the payload with path-bearing and mode fields (cwd, transcript_path,
+# permission_mode, hook_event_name) stripped first, so a keyword in a directory name
+# (e.g. ~/design-system) or permission_mode "plan" can't false-trigger on every prompt.
 # What remains is the prompt + ids — a match means the verb is in the user's prompt. No JSON parser dependency.
-input="$(LC_ALL=C sed -E 's/"(transcript_path|cwd)"[[:space:]]*:[[:space:]]*"[^"]*"//g')"
+input="$(LC_ALL=C sed -E 's/"(transcript_path|cwd|permission_mode|hook_event_name)"[[:space:]]*:[[:space:]]*"[^"]*"//g')"
 if printf '%s' "$input" | LC_ALL=C grep -qiE '\b(implement|build|refactor|plan|feature|fix|add|migrat[a-z]*|design|tdd|task)\b'; then
   cat <<'DIRECTIVES'
 <engineering-discipline>
